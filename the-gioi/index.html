@@ -906,7 +906,7 @@ function savePosSoon() {
 /* ---------------------------------------------------------------- vòng lặp */
 let t0 = 0;
 const camF = new THREE.Vector3(), camR = new THREE.Vector3();
-const stepV = new THREE.Vector3(), followT = new THREE.Vector3();
+const stepV = new THREE.Vector3(), followT = new THREE.Vector3(), camOff = new THREE.Vector3();
 
 /** Đi từng trục một (trượt dọc tường thay vì dính cứng).
     Chỉ chặn khi khối cao HƠN mình quá ngưỡng — hụt chân thì rơi xuống, nên đi
@@ -935,7 +935,7 @@ $('jump').addEventListener('pointerdown', (e) => { e.preventDefault(); tryJump()
 
 function tick(now) {
   requestAnimationFrame(tick);
-  const dt = Math.min(60, now - t0); t0 = now;
+  const dt = Math.min(60, Math.max(0, now - t0)); t0 = now;   // chặn dt âm nếu mốc thời gian nhảy lùi
 
   /* ---- đi lại ---- */
   const mv = stickVec;
@@ -1017,10 +1017,32 @@ function tick(now) {
     b.sprite.position.set(o.group.position.x, o.group.position.y + 3.4, o.group.position.z);
   }
 
-  /* ---- camera bám nhân vật ---- */
+  /* ---- camera bám nhân vật ----
+   * Phải dời CẢ camera theo cùng một lượng với điểm ngắm. Nếu chỉ dời điểm
+   * ngắm, mỗi khung hình OrbitControls lại lấy khoảng cách thật (camera →
+   * điểm ngắm) làm bán kính quay, mà camera đứng yên nên bán kính lớn dần:
+   * đi một lúc là cả map bị đẩy ra xa dần. */
   if (player.ready) {
     followT.set(player.x, player.y + 1.15, player.z);
-    controls.target.lerp(followT, Math.min(1, dt / 90));
+    const k = Math.min(1, dt / 90);
+    const dx = (followT.x - controls.target.x) * k;
+    const dy = (followT.y - controls.target.y) * k * 0.55;   // trục dọc bám chậm hơn cho đỡ chóng mặt
+    const dz = (followT.z - controls.target.z) * k;
+    controls.target.x += dx;
+    controls.target.y += dy;
+    controls.target.z += dz;
+    camera.position.x += dx;
+    camera.position.y += dy;
+    camera.position.z += dz;
+
+    // chốt an toàn: khoảng cách luôn nằm trong khoảng cho phép
+    camOff.copy(camera.position).sub(controls.target);
+    const d = camOff.length();
+    const want = Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
+    if (Math.abs(want - d) > 0.001) {
+      camOff.setLength(want);
+      camera.position.copy(controls.target).add(camOff);
+    }
   }
   controls.update();
   renderer.render(scene, camera);
