@@ -36,12 +36,12 @@
     --body:#d0d6e0;
     --muted:#8a8f98;
 
-    --border:rgba(255,255,255,.11);
-    --border-subtle:rgba(255,255,255,.085);
-    --border-hair:rgba(255,255,255,.06);
+    --border:rgba(255,255,255,.13);
+    --border-subtle:rgba(255,255,255,.10);
+    --border-hair:rgba(255,255,255,.065);
 
-    --row:rgba(255,255,255,.035);
-    --row-hover:rgba(255,255,255,.07);
+    --row:rgba(255,255,255,.045);
+    --row-hover:rgba(255,255,255,.075);
     --row-shadow:none;          /* Linear: nền tối không dùng shadow để tạo elevation */
     --chev-op:.72;
 
@@ -381,7 +381,7 @@ if (inTg && tg.onEvent) {
 /* ---------------- render apps ---------------- */
 const list = document.getElementById('app-list');
 const empty = document.getElementById('empty');
-document.getElementById('count').textContent = String(APPS.length).padStart(2, '0');
+document.getElementById('count').textContent = String(APPS.length);
 
 if (!APPS.length) {
   empty.hidden = false;
