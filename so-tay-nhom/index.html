@@ -153,38 +153,81 @@ if (inTg) {
 
 const $ = id => document.getElementById(id);
 
-/* ---------------- cổng vào: chỉ thành viên nhóm ---------------- */
-/* initData do Telegram ký, client không tự đặt được. Ta đòi đúng chat của nhóm. */
+/* ---------------- cổng vào: vé do Hub phát ---------------- */
+/* Trang con không có initData (điều hướng trong webview làm mất context Telegram)
+   nên không tự xác thực được. Hub còn nguyên initData → hub phát vé vào Firestore,
+   app đọc vé: chưa duyệt / hết hạn / không vé thì không tải nội dung. */
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
 const fromGroup = !!(chat && String(chat.id) === GROUP_ID);
-const chatKey   = chat ? String(chat.id) : (fromGroup ? GROUP_ID : '');
 
-if (!fromGroup) {
-  $('gate').hidden = false;
-  $('status').textContent = inTg ? 'Đang chạy trên Telegram' : 'Đang chạy trên trình duyệt';
-  $('status').style.opacity = '1';
-  $('gateText').textContent = inTg
-    ? 'App này gắn với chat nhóm "' + GROUP_NAME + '". Bạn đang mở từ ' +
-      (chat ? ('chat ' + (chat.title || chat.type)) : 'ngoài nhóm') +
-      ' nên không xem được nội dung.'
-    : 'App chỉ mở được trong Telegram, từ bên trong nhóm chat.';
-  if (inTg) { $('gateBtn').hidden = false; $('gateBtn').onclick = () => { try { tg.close(); } catch (e) {} }; }
-} else {
-  start();
+async function ticketCheck() {
+  if (fromGroup) return { ok: true, who: '' };
+  if (!TOKEN) return { ok: false, why: 'no-ticket' };
+  try {
+    const r = await fetch(FS_BASE + '/games/group-digest-tickets/scores/' + encodeURIComponent(TOKEN) + '?key=' + FS_KEY);
+    if (!r.ok) return { ok: false, why: 'no-ticket' };
+    const f = ((await r.json()).fields) || {};
+    const allow = !!(f.allow && f.allow.booleanValue);
+    const exp = parseInt((f.score || {}).integerValue || '0', 10);
+    const who = (f.userName || {}).stringValue || '';
+    if (!allow) return { ok: false, why: 'pending', who };
+    if (exp && exp < Math.floor(Date.now() / 1000)) return { ok: false, why: 'expired', who };
+    return { ok: true, who };
+  } catch (e) { return { ok: false, why: 'offline' }; }
 }
 
+const GATES = {
+  'no-ticket': ['🔒', 'Chỉ thành viên nhóm mới xem được',
+    'App chỉ mở được từ trong nhóm. Bạn hãy vào nhóm và bấm nút 📖 Sổ Tay Nhóm nhé.'],
+  'pending': ['🕓', 'Đang chờ duyệt',
+    'Bạn chưa có trong danh sách được xem. Nhắn vào nhóm một câu để xin quyền, duyệt xong mở lại là đọc được.'],
+  'expired': ['⌛', 'Phiên xem đã hết hạn',
+    'Vé vào sổ chỉ sống 15 phút. Bấm lại nút 📖 Sổ Tay Nhóm trong nhóm là có vé mới.'],
+  'offline': ['📡', 'Không kiểm tra được quyền',
+    'Mạng đang chập. Thử lại sau ít phút nhé.']
+};
+
+function showGate(kind, who) {
+  const g = GATES[kind] || GATES['no-ticket'];
+  $('gate').hidden = false;
+  $('gateIcon').textContent = g[0];
+  $('gateTitle').textContent = g[1];
+  $('gateText').innerHTML = esc(g[2]) + (who ? '<br><br>Đang xin cho: <b>' + esc(who) + '</b>' : '');
+  $('status').textContent = inTg ? 'Đang chạy trong Telegram' : 'Đang chạy trên trình duyệt';
+  if (inTg) {
+    const btn = $('gateBtn');
+    btn.hidden = false;
+    btn.textContent = 'Mở nhóm để xin quyền';
+    btn.onclick = () => { try { tg.openTelegramLink('https://t.me/c/1769279835/1'); } catch (e) {} };
+  }
+}
+
+(async function boot() {
+  const t = await ticketCheck();
+  if (t.ok) start(t.who); else showGate(t.why, t.who);
+})();
+
 /* ---------------- hiển thị người xem ---------------- */
-function renderYou() {
-  if (!user) return;
+function renderYou(fallbackName) {
+  const name = user
+    ? ([user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || 'Bạn')
+    : (fallbackName || '');
+  if (!name) return;
   const el = $('you');
-  const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || 'Bạn';
+  if (!user || !user.photo_url) {
+    el.hidden = false;
+    el.innerHTML = '<span class="pip">' + esc(name.charAt(0).toUpperCase()) + '</span><span></span>';
+    el.querySelector('span:last-child').textContent = name;
+    return;
+  }
   el.hidden = false;
   el.innerHTML = (user.photo_url ? '<img src="' + user.photo_url + '" alt="">'
                  : '<span class="pip">' + name.charAt(0).toUpperCase() + '</span>') + '<span></span>';
   el.querySelector('span:last-child').textContent = name;
 }
 
-function start() {
-  renderYou();
+function start(who) {
+  renderYou(who);
   $('subtitle').textContent = GROUP_NAME;
   $('status').textContent = 'Đang tải sổ tay…';
   ['skeleton','skeleton','skeleton'].forEach(() => {
