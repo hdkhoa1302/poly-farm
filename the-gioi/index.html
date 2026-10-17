@@ -52,6 +52,15 @@
   .dock .note{margin-top:8px;text-align:center;font-size:11px;color:var(--muted);min-height:14px}
   .dock .note b{color:var(--text)}
 
+  /* cần điều khiển đi lại */
+  .stick{position:fixed;left:16px;bottom:calc(142px + env(safe-area-inset-bottom));width:106px;height:106px;
+    border-radius:50%;border:1px solid var(--line);background:rgba(12,18,30,.42);backdrop-filter:blur(8px);
+    touch-action:none;z-index:6;display:grid;place-items:center}
+  .stick .knob{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.32);
+    border:1px solid rgba(255,255,255,.5);pointer-events:none}
+  .stick .ring{position:absolute;inset:14px;border-radius:50%;border:1px dashed rgba(255,255,255,.14);pointer-events:none}
+  .stick .hint{position:absolute;bottom:-19px;left:0;right:0;text-align:center;font-size:10.5px;color:var(--muted)}
+
   .toast{position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom));transform:translate(-50%,14px);
       background:rgba(12,18,30,.95);border:1px solid var(--line);border-radius:10px;padding:9px 14px;
       font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .22s var(--ease),transform .22s var(--ease);z-index:9;max-width:84vw;text-align:center}
@@ -87,6 +96,8 @@
   <div class="pal" id="pal"></div>
   <div class="note" id="note"></div>
 </div>
+
+<div class="stick" id="stick"><div class="ring"></div><div class="knob" id="knob"></div><div class="hint">đi</div></div>
 
 <div class="toast" id="toast"></div>
 
@@ -184,8 +195,7 @@ controls.dampingFactor = 0.09;
 controls.minDistance = 8;
 controls.maxDistance = 90;
 controls.maxPolarAngle = Math.PI * 0.47;   // không chui xuống dưới đất
-controls.enablePan = true;
-controls.panSpeed = 0.7;
+controls.enablePan = false;      // camera bám nhân vật nên kéo nền gây rối
 controls.rotateSpeed = 0.75;
 controls.zoomSpeed = 0.9;
 controls.target.set(0, 1, 0);
@@ -250,6 +260,20 @@ worldGroup.add(groundGroup);
 /** khối đang có: khoá "x,y,z" -> mesh */
 const blockMeshes = new Map();
 const keyOf = (x, y, z) => x + ',' + y + ',' + z;
+/** cao độ sàn của từng cột "x,z" -> số tầng. Giữ sẵn để kiểm va chạm O(1)
+    thay vì quét toàn bộ khối mỗi khung hình. */
+const colTop = new Map();
+const colKey = (x, z) => x + ',' + z;
+function bumpCol(x, z) {
+  let top = 0;
+  for (const [, m] of blockMeshes) {
+    const d = m.userData;
+    if (d.x === x && d.z === z) top = Math.max(top, d.y + 1);
+  }
+  colTop.set(colKey(x, z), top);
+  return top;
+}
+const topAt = (x, z) => colTop.get(colKey(x, z)) || 0;
 
 function addBlockMesh(x, y, z, type, owner) {
   const mesh = new THREE.Mesh(BOX, MATS[type] || MATS.grass);
@@ -261,6 +285,7 @@ function addBlockMesh(x, y, z, type, owner) {
   mesh.add(edges);
   blockGroup.add(mesh);
   blockMeshes.set(keyOf(x, y, z), mesh);
+  bumpCol(x, z);
   return mesh;
 }
 function removeBlockMesh(x, y, z) {
@@ -268,6 +293,7 @@ function removeBlockMesh(x, y, z) {
   if (!m) return;
   blockGroup.remove(m);
   blockMeshes.delete(keyOf(x, y, z));
+  bumpCol(x, z);
 }
 
 /* ---------------------------------------------------------------- nhân vật voxel */
@@ -286,18 +312,30 @@ function buildPerson(hue, asleep) {
     g.add(m);
     return m;
   };
+  // Tay/chân phải quay quanh KHỚP (đầu chi) nên bọc trong group đặt ở khớp,
+  // còn khối thì treo xuống dưới — không thì vung tay sẽ quay quanh bụng.
+  const limb = (w, h, d, x, pivotY, z, mat) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, pivotY, z);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.y = -h / 2;
+    m.castShadow = true;
+    pivot.add(m);
+    g.add(pivot);
+    return pivot;
+  };
   // chân 0.5 · thân 0.6 · đầu 0.42  → cao ~1.8
-  add(0.22, 0.5, 0.22, -0.13, 0.25, 0, pants);
-  add(0.22, 0.5, 0.22,  0.13, 0.25, 0, pants);
-  add(0.52, 0.6, 0.3,    0,   0.8,  0, shirt);
-  add(0.16, 0.5, 0.16, -0.34, 0.8,  0, shirt);
-  add(0.16, 0.5, 0.16,  0.34, 0.8,  0, shirt);
-  add(0.44, 0.42, 0.42,  0,   1.31, 0, M_SKIN);
-  add(0.46, 0.14, 0.44,  0,   1.52, 0, M_HAIR);   // tóc
-  // mắt
+  const legL = limb(0.22, 0.5, 0.22, -0.13, 0.5, 0, pants);
+  const legR = limb(0.22, 0.5, 0.22,  0.13, 0.5, 0, pants);
+  add(0.52, 0.6, 0.3, 0, 0.8, 0, shirt);
+  const armL = limb(0.16, 0.5, 0.16, -0.34, 1.05, 0, shirt);
+  const armR = limb(0.16, 0.5, 0.16,  0.34, 1.05, 0, shirt);
+  add(0.44, 0.42, 0.42, 0, 1.31, 0, M_SKIN);
+  add(0.46, 0.14, 0.44, 0, 1.52, 0, M_HAIR);      // tóc
   const eye = new THREE.MeshBasicMaterial({ color: 0x241f1c });
   add(0.07, 0.07, 0.02, -0.1, 1.32, 0.22, eye);
   add(0.07, 0.07, 0.02,  0.1, 1.32, 0.22, eye);
+  g.userData.limbs = { legL, legR, armL, armR };
 
   if (asleep) {
     // nằm ngủ: ngả người xuống đất
@@ -349,6 +387,12 @@ function zzzSprite() {
 }
 
 /* ---------------------------------------------------------------- trạng thái */
+const SPEED = 4.4;         // đơn vị mỗi giây
+/* Người chơi: vị trí là THẬT (lưu lên server) nên người khác thấy được mình
+   đang đứng đâu; xoay mặt thì chỉ cục bộ. */
+const player = { x: 0, z: 0, y: 0, targetY: 0, ready: false, yaw: 0, moving: false };
+
+let ROWS = 2;              // số hàng lô đất (đổi theo số người)
 let WORLD = null;          // dữ liệu từ Worker
 let MY_PLOT = -1;
 let MY_HUE = 210;
@@ -453,29 +497,30 @@ function renderWorld() {
       if (m.id === (me()?.id)) myBlocks++;
     }
 
-    // chỗ đứng: giữa lô, đứng trên khối cao nhất của mình (để không lún vào nhà)
-    let hx = ox + Math.floor(PLOT / 2), hz = oz + Math.floor(PLOT / 2);
-    let top = 0;
-    for (const b of (m.blocks || [])) {
-      if (b.x === hx && b.z === hz) top = Math.max(top, b.y + 1);
-    }
+    // chỗ đứng: vị trí đã lưu; chưa có thì đứng giữa lô
+    const isMe = m.id === (me() && me().id);
+    let px, pz;
+    if (isMe && player.ready) { px = player.x; pz = player.z; }
+    else if (m.posX != null && m.posZ != null) { px = m.posX; pz = m.posZ; }
+    else { px = ox + Math.floor(PLOT / 2) + 0.5; pz = oz + Math.floor(PLOT / 2) + 0.5; }
+    const top = topAt(Math.floor(px), Math.floor(pz));
 
     const p = buildPerson(m.hue == null ? 210 : m.hue, asleep);
-    p.position.set(hx + 0.5, asleep ? 0.28 : top, hz + 0.5);
+    p.position.set(px, asleep ? 0.28 : top, pz);
     p.rotation.y = ((m.plot % 4) * Math.PI) / 2 + Math.PI * 0.15;
     peopleGroup.add(p);
 
     const label = labelSprite(m.name + (asleep ? ' · ngủ' : ''), m.hue);
-    label.position.set(hx + 0.5, (asleep ? 0.5 : top + 2.25), hz + 0.5);
+    label.position.set(px, (asleep ? 0.5 : top + 2.25), pz);
     peopleGroup.add(label);
 
     let zzz = null;
     if (asleep) {
       zzz = zzzSprite();
-      zzz.position.set(hx + 1.1, 0.9, hz + 0.4);
+      zzz.position.set(px + 1.1, 0.9, pz + 0.4);
       peopleGroup.add(zzz);
     }
-    local.set(m.id, { group: p, label, zzz, asleep, base: p.position.y, hx, hz });
+    local.set(m.id, { group: p, label, zzz, asleep, base: p.position.y, hx: Math.floor(px), hz: Math.floor(pz) });
   }
 
   $('sub').textContent = members.length + ' người · ' + awake + ' đang thức';
@@ -483,6 +528,7 @@ function renderWorld() {
 
   // khung nhìn: bao cả thế giới
   const W = COLS * PLOT, D = rows * PLOT;
+  ROWS = rows;
   fitShadowToWorld(W, D);
   controls.target.set(W / 2 - 0.5, 1.2, D / 2 - 0.5);
   controls.maxDistance = Math.max(70, W * 1.8);
@@ -675,11 +721,14 @@ function updateNote() {
 /* ---------------------------------------------------------------- nút góc */
 $('home').onclick = () => {
   const { ox, oz } = myOrigin();
-  controls.target.set(ox + PLOT / 2, Math.max(1.2, myBlocks > 0 ? 2 : 1.2), oz + PLOT / 2);
-  const cam = controls.target.clone().add(new THREE.Vector3(11, 12, 13));
-  camera.position.copy(cam);
-  controls.update();
-  toast('Đây là lô của bạn', 1400);
+  if (player.ready) {
+    player.x = ox + PLOT / 2 + 0.5;
+    player.z = oz + PLOT / 2 + 0.5;
+    player.y = player.targetY = topAt(Math.floor(player.x), Math.floor(player.z));
+    camera.position.set(player.x + 11, player.y + 12, player.z + 13);
+    savePosSoon();
+  }
+  toast('Đã về lô của bạn', 1400);
 };
 $('awake').onclick = () => {
   const list = (WORLD?.members || []);
@@ -688,20 +737,114 @@ $('awake').onclick = () => {
   toast('Đang thức: ' + awake.map(m => m.name.split(' ')[0]).join(', '), 3200);
 };
 
+/* ---------------------------------------------------------------- cần điều khiển */
+const stickEl = $('stick'), knobEl = $('knob');
+let stickId = null;
+let stickVec = { x: 0, y: 0 };
+
+function stickSet(cx, cy) {
+  const r = stickEl.getBoundingClientRect();
+  const ox = r.left + r.width / 2, oy = r.top + r.height / 2;
+  const max = r.width / 2 - 14;
+  let dx = cx - ox, dy = cy - oy;
+  const d = Math.hypot(dx, dy);
+  if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+  knobEl.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+  stickVec = { x: dx / max, y: dy / max };
+}
+function stickReset() {
+  stickId = null; stickVec = { x: 0, y: 0 };
+  knobEl.style.transform = '';
+}
+stickEl.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); stickId = e.pointerId;
+  try { stickEl.setPointerCapture(e.pointerId); } catch (err) {}
+  stickSet(e.clientX, e.clientY);
+});
+stickEl.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) stickSet(e.clientX, e.clientY); });
+stickEl.addEventListener('pointerup', (e) => { if (e.pointerId === stickId) { stickReset(); savePosSoon(); } });
+stickEl.addEventListener('pointercancel', () => stickReset());
+
+/* Lưu chỗ đang đứng lên server (gộp nhiều lần di chuyển thành 1 lần gửi) */
+let posTimer = null;
+function savePosSoon() {
+  if (!inTg || !initData() || !player.ready) return;
+  clearTimeout(posTimer);
+  posTimer = setTimeout(() => {
+    post('/world/join', { initData: initData(), beat: true, x: player.x, z: player.z });
+  }, 1000);
+}
+
 /* ---------------------------------------------------------------- vòng lặp */
 let t0 = 0;
+const camF = new THREE.Vector3(), camR = new THREE.Vector3();
+const stepV = new THREE.Vector3(), followT = new THREE.Vector3();
+
+/** Đi từng trục một (trượt dọc tường thay vì dính cứng). Chênh cao quá 1 khối
+    thì coi là tường — leo được 1 khối như bậc thềm. */
+function moveBy(dx, dz) {
+  const nx = player.x + dx, nz = player.z + dz;
+  const cx = Math.floor(nx), cz = Math.floor(nz);
+  if (cx < -10 || cz < -10 || cx > COLS * PLOT + 10 || cz > ROWS * PLOT + 10) return false;
+  const h = topAt(cx, cz);
+  if (Math.abs(h - player.y) > 1.05) return false;
+  player.x = nx; player.z = nz; player.targetY = h;
+  return true;
+}
+
 function tick(now) {
   requestAnimationFrame(tick);
-  const dt = now - t0; t0 = now;
+  const dt = Math.min(60, now - t0); t0 = now;
 
-  // nhấp nhô nhẹ cho người đang thức, zzz trôi lên cho người đang ngủ
-  for (const [, o] of local) {
+  /* ---- đi lại ---- */
+  const mv = stickVec;
+  player.moving = player.ready && Math.hypot(mv.x, mv.y) > 0.14;
+  if (player.moving) {
+    camera.getWorldDirection(camF); camF.y = 0;
+    if (camF.lengthSq() < 1e-6) camF.set(0, 0, -1);
+    camF.normalize();
+    camR.set(-camF.z, 0, camF.x);                       // phải của hướng nhìn
+    stepV.set(0, 0, 0).addScaledVector(camF, -mv.y).addScaledVector(camR, mv.x);
+    if (stepV.lengthSq() > 1e-6) {
+      stepV.normalize().multiplyScalar(SPEED * dt / 1000);
+      moveBy(stepV.x, 0);
+      moveBy(0, stepV.z);
+      player.yaw = Math.atan2(stepV.x, stepV.z);
+      savePosSoon();
+    }
+  }
+  player.y += (player.targetY - player.y) * Math.min(1, dt / 85);   // lên/xuống êm
+
+  /* ---- vẽ người ---- */
+  const myId = me() && me().id;
+  for (const [id, o] of local) {
     if (o.asleep) {
-      if (o.zzz) { o.zzz.position.y = 0.9 + Math.sin(now / 620) * 0.16; o.zzz.material.opacity = 0.55 + Math.sin(now / 620) * 0.35; }
+      if (o.zzz) {
+        o.zzz.position.y = 0.9 + Math.sin(now / 620) * 0.16;
+        o.zzz.material.opacity = 0.55 + Math.sin(now / 620) * 0.35;
+      }
+      continue;
+    }
+    if (id === myId && player.ready) {
+      o.group.position.set(player.x, player.y, player.z);
+      o.group.rotation.y = player.yaw;
+      const L = o.group.userData.limbs;
+      const sw = player.moving ? Math.sin(now / 105) * 0.62 : 0;
+      if (L) {
+        L.legL.rotation.x = sw; L.legR.rotation.x = -sw;
+        L.armL.rotation.x = -sw * 0.75; L.armR.rotation.x = sw * 0.75;
+      }
+      o.label.position.set(player.x, player.y + 2.25, player.z);
+      o.base = player.y;
     } else {
       o.group.position.y = o.base + Math.sin(now / 700 + o.base) * 0.035;
     }
-    if (o.label) o.label.material.opacity = 1;
+  }
+
+  /* ---- camera bám nhân vật ---- */
+  if (player.ready) {
+    followT.set(player.x, player.y + 1.15, player.z);
+    controls.target.lerp(followT, Math.min(1, dt / 90));
   }
   controls.update();
   renderer.render(scene, camera);
@@ -739,9 +882,21 @@ async function boot() {
     const mine = (WORLD.members || []).find(m => m.id === u.id);
     if (mine) { MY_PLOT = mine.plot; MY_HUE = mine.hue; }
   }
+  // đặt chỗ đứng TRƯỚC khi vẽ (để nhân vật hiện đúng nơi, không nhảy sau 1 khung)
+  if (u) {
+    const mine = (WORLD.members || []).find(m => m.id === u.id);
+    if (mine) {
+      const { ox, oz } = origin(mine.plot);
+      player.x = mine.posX != null ? mine.posX : ox + PLOT / 2 + 0.5;
+      player.z = mine.posZ != null ? mine.posZ : oz + PLOT / 2 + 0.5;
+      player.ready = true;
+    }
+  }
   ghost = makeGhost();
   buildPalette();
   renderWorld();
+  // giờ mới biết cao độ sàn (colTop vừa được dựng cùng khối)
+  if (player.ready) player.y = player.targetY = topAt(Math.floor(player.x), Math.floor(player.z));
   $('veil').hidden = true;
 
   if (MY_PLOT >= 0) {
@@ -755,7 +910,8 @@ async function boot() {
 
 /* giữ nhịp sống + làm mới thế giới định kỳ (người khác vào/ngủ vẫn thấy đúng) */
 if (inTg && initData()) {
-  setInterval(() => post('/world/join', { initData: initData(), beat: true }), 45000);
+  setInterval(() => post('/world/join',
+    { initData: initData(), beat: true, x: player.x, z: player.z }), 45000);
   setInterval(async () => {
     const w = await get('/world');
     if (w.ok && w.body) {

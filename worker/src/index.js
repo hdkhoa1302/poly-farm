@@ -25,7 +25,7 @@
  *   POST /apps/delete            (body initData + id)   -> chỉ OWNER_ID
  *   POST /apps/restore           (body initData + id)   -> chỉ OWNER_ID
  *   GET  /world                  -> cả thế giới (công khai: ai cũng xem được)
- *   POST /world/join             (body initData)        -> ghi danh + cập nhật nhịp sống
+ *   POST /world/join             (body initData, x?, z?) -> ghi danh + nhịp sống + vị trí
  *   POST /world/block            (body initData + x,y,z + t|null) -> xây/xoá 1 khối
  *
  * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
@@ -468,7 +468,7 @@ function plotOrigin(plot) {
 async function worldState(env) {
   const now = Math.floor(Date.now() / 1000);
   const mem = await env.DB.prepare(
-    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits
+    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits,pos_x,pos_z
        FROM world_members ORDER BY plot`
   ).all();
   const blk = await env.DB.prepare(
@@ -487,6 +487,7 @@ async function worldState(env) {
       id: m.user_id, name: m.name, username: m.username, photo: m.photo,
       hue: m.hue, plot: m.plot,
       firstSeen: m.first_seen, lastSeen: m.last_seen, visits: m.visits,
+      posX: m.pos_x == null ? null : m.pos_x, posZ: m.pos_z == null ? null : m.pos_z,
       asleep: (now - m.last_seen) > SLEEP_SEC,
       blocks: byUser[m.user_id] || [],
     })),
@@ -511,6 +512,11 @@ async function worldJoin(request, env) {
   const now = Math.floor(Date.now() / 1000);
   const beat = b.beat === true;
 
+  // vị trí gửi kèm (khi đang đi lại) — chỉ nhận nếu hợp lệ và nằm trong thế giới
+  const hasPos = Number.isFinite(Number(b.x)) && Number.isFinite(Number(b.z));
+  const px = hasPos ? Math.round(Number(b.x) * 100) / 100 : null;
+  const pz = hasPos ? Math.round(Number(b.z) * 100) / 100 : null;
+
   const ex = await env.DB.prepare('SELECT plot FROM world_members WHERE user_id = ?').bind(uid).first();
   if (!ex) {
     if (beat) return json({ ok: true, joined: false });
@@ -527,16 +533,23 @@ async function worldJoin(request, env) {
   }
 
   if (beat) {
-    await env.DB.prepare('UPDATE world_members SET last_seen = ? WHERE user_id = ?').bind(now, uid).run();
+    if (px == null) {
+      await env.DB.prepare('UPDATE world_members SET last_seen = ? WHERE user_id = ?').bind(now, uid).run();
+    } else {
+      await env.DB.prepare(
+        'UPDATE world_members SET last_seen = ?, pos_x = ?, pos_z = ? WHERE user_id = ?'
+      ).bind(now, px, pz, uid).run();
+    }
     return json({ ok: true, joined: true, beat: true, plot: ex.plot });
   }
 
   await env.DB.prepare(
-    `UPDATE world_members SET name=?, username=?, photo=?, last_seen=?, visits=visits+1
+    `UPDATE world_members SET name=?, username=?, photo=?, last_seen=?, visits=visits+1,
+       pos_x = COALESCE(?, pos_x), pos_z = COALESCE(?, pos_z)
       WHERE user_id = ?`
   ).bind(
     ([u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || 'Ai đó').slice(0, 64),
-    u.username || '', u.photo_url || '', now, uid
+    u.username || '', u.photo_url || '', now, px, pz, uid
   ).run();
   return json({ ok: true, joined: true, plot: ex.plot });
 }
