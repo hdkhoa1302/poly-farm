@@ -22,7 +22,7 @@
     font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:-.011em}
   canvas{display:block;width:100%;height:100%;touch-action:none}
 
-  .hud{position:fixed;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+  .hud{position:fixed;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 148px 10px 12px;
        display:flex;align-items:center;gap:9px;pointer-events:none;z-index:5}
   .hud > *{pointer-events:auto}
   .iconbtn{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:10px;
@@ -36,8 +36,8 @@
   .titles b{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .titles span{display:block;font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  .tools{position:fixed;right:12px;bottom:calc(96px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;z-index:5}
-  .tools .iconbtn{width:38px;height:38px}
+  .tools{position:fixed;right:12px;top:calc(10px + env(safe-area-inset-top));display:flex;gap:8px;z-index:7}
+  .tools .iconbtn{width:38px;height:38px;position:relative}
 
   .dock{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(12px + env(safe-area-inset-bottom));
         background:linear-gradient(to top,rgba(8,12,20,.92),rgba(8,12,20,.55),transparent);z-index:5}
@@ -60,6 +60,53 @@
     border:1px solid rgba(255,255,255,.5);pointer-events:none}
   .stick .ring{position:absolute;inset:14px;border-radius:50%;border:1px dashed rgba(255,255,255,.14);pointer-events:none}
   .stick .hint{position:absolute;bottom:-19px;left:0;right:0;text-align:center;font-size:10.5px;color:var(--muted)}
+
+  /* nút nhảy — soi gương với cần điều khiển bên trái, chỗ ngón cái phải */
+  .jump{position:fixed;right:16px;bottom:calc(142px + env(safe-area-inset-bottom));width:72px;height:72px;
+    border-radius:50%;border:1px solid var(--line);background:rgba(12,18,30,.42);backdrop-filter:blur(8px);
+    display:grid;place-items:center;z-index:6;touch-action:none;color:var(--ink)}
+  .jump:active{transform:scale(.93);background:rgba(30,42,64,.7)}
+  .jump .lbl{position:absolute;bottom:-19px;left:0;right:0;text-align:center;font-size:10.5px;color:var(--muted)}
+
+  .badge{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:#e2554f;
+    color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px}
+
+  /* bảng chat: tấm trượt từ đáy lên */
+  .chat{position:fixed;left:0;right:0;bottom:0;max-height:64vh;display:flex;flex-direction:column;
+    background:rgba(10,15,24,.97);border-top:1px solid var(--line);border-radius:16px 16px 0 0;
+    transform:translateY(105%);transition:transform .26s var(--ease);z-index:12;
+    padding-bottom:env(safe-area-inset-bottom)}
+  .chat.on{transform:translateY(0)}
+  .chat .head{display:flex;align-items:center;gap:9px;padding:13px 14px 9px;border-bottom:1px solid var(--line)}
+  .chat .head b{font-size:13.5px;font-weight:600;flex:1;min-width:0}
+  .chatList{flex:1;overflow-y:auto;padding:11px 14px;display:flex;flex-direction:column;gap:9px;
+    -webkit-overflow-scrolling:touch;min-height:80px}
+  .chatList .empty{color:var(--muted);font-size:12.5px;text-align:center;margin:auto;line-height:1.6}
+  .chatRow{display:flex;flex-direction:column;gap:3px;max-width:86%}
+  .chatRow.mine{align-self:flex-end;align-items:flex-end}
+  .chatRow .who{font-size:11px;font-weight:600}
+  .chatRow .tx{font-size:13.5px;line-height:1.45;background:rgba(30,42,64,.85);border:1px solid var(--line);
+    border-radius:11px;padding:7px 11px;overflow-wrap:anywhere}
+  .chatRow.mine .tx{background:rgba(58,120,220,.3)}
+  .chatForm{display:flex;gap:8px;padding:10px 14px 12px;border-top:1px solid var(--line)}
+  .chatIn{flex:1;min-width:0;background:rgba(20,28,42,.92);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font:inherit;font-size:14px;padding:9px 12px}
+  .chatIn:focus{outline:none;border-color:#4a7fd4}
+  .chatSend{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:10px;
+    border:1px solid var(--line);background:rgba(58,120,220,.32);color:var(--ink)}
+  .chatSend:disabled{opacity:.45}
+
+  /* hướng dẫn lần đầu */
+  .guide{position:fixed;inset:0;display:grid;place-items:center;background:rgba(8,12,20,.85);z-index:22;padding:22px}
+  .guide .box{max-width:330px;width:100%}
+  .guide h2{font-size:15.5px;font-weight:600;margin-bottom:13px}
+  .guide ul{list-style:none;display:flex;flex-direction:column;gap:11px;margin-bottom:16px}
+  .guide li{display:flex;gap:10px;font-size:12.8px;color:var(--muted);line-height:1.5;align-items:flex-start}
+  .guide li b{color:var(--ink);font-weight:600}
+  .guide .gIcon{flex:none;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);
+    display:grid;place-items:center;background:rgba(30,42,64,.6);color:var(--ink)}
+  .guide button{width:100%;padding:11px;border-radius:11px;border:1px solid var(--line);
+    background:rgba(58,120,220,.32);color:var(--ink);font:inherit;font-size:14px;font-weight:600}
 
   .toast{position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom));transform:translate(-50%,14px);
       background:rgba(12,18,30,.95);border:1px solid var(--line);border-radius:10px;padding:9px 14px;
@@ -90,6 +137,7 @@
 <div class="tools">
   <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
   <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
+  <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
 </div>
 
 <div class="dock">
@@ -98,6 +146,32 @@
 </div>
 
 <div class="stick" id="stick"><div class="ring"></div><div class="knob" id="knob"></div><div class="hint">đi</div></div>
+
+<button class="jump" id="jump"><span id="jumpIcon"></span><div class="lbl">nhảy</div></button>
+
+<div class="chat" id="chatPanel">
+  <div class="head">
+    <b>Chat trong thế giới</b>
+    <button class="iconbtn" id="chatClose"><span id="chatCloseIcon"></span></button>
+  </div>
+  <div class="chatList" id="chatList"></div>
+  <div class="chatForm">
+    <input class="chatIn" id="chatIn" type="text" maxlength="200" placeholder="Nhắn gì đó…" autocomplete="off" enterkeyhint="send">
+    <button class="chatSend" id="chatSend"><span id="chatSendIcon"></span></button>
+  </div>
+</div>
+
+<div class="guide" id="guide" hidden><div class="box">
+  <h2>Đi lại &amp; xây trong thế giới</h2>
+  <ul>
+    <li><span class="gIcon" id="g1"></span><span><b>Cần bên trái</b> để đi. Đẩy hết cỡ là chạy nhanh.</span></li>
+    <li><span class="gIcon" id="g2"></span><span><b>Nút nhảy</b> bên phải để leo cao 2 tầng.</span></li>
+    <li><span class="gIcon" id="g3"></span><span><b>Kéo trên nền</b> để xoay nhìn, chụm 2 ngón để thu phóng.</span></li>
+    <li><span class="gIcon" id="g4"></span><span><b>Chạm vào đất</b> trong lô mình để xây. Chọn <b>Tẩy</b> rồi chạm để xoá.</span></li>
+    <li><span class="gIcon" id="g5"></span><span><b>Nút chat</b> góc phải trên để nói chuyện với mọi người.</span></li>
+  </ul>
+  <button id="guideOk">Đã hiểu</button>
+</div></div>
 
 <div class="toast" id="toast"></div>
 
@@ -162,6 +236,13 @@ const ICONS = {
   'sun':'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   'eraser':'<path d="m7 21-4.3-4.3a2 2 0 0 1 0-2.8l9.6-9.6a2 2 0 0 1 2.8 0l4.3 4.3a2 2 0 0 1 0 2.8L11 21z"/><path d="M22 21H7"/>',
   'moon':'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/>',
+  'chat':'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  'jump':'<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  'close':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  'send':'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  'move':'<path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3"/><path d="m9 19 3 3 3-3"/><path d="m5 9-3 3 3 3"/><path d="m19 9 3 3-3 3"/>',
+  'rotate':'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+  'box':'<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
 };
 function svg(name, size = 18) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="${size}" height="${size}">${ICONS[name] || ''}</svg>`;
@@ -169,6 +250,15 @@ function svg(name, size = 18) {
 $('backIcon').innerHTML = svg('arrow-left', 17);
 $('homeIcon').innerHTML = svg('crosshair', 18);
 $('awakeIcon').innerHTML = svg('sun', 18);
+$('chatIcon').innerHTML = svg('chat', 18);
+$('jumpIcon').innerHTML = svg('jump', 26);
+$('chatCloseIcon').innerHTML = svg('close', 16);
+$('chatSendIcon').innerHTML = svg('send', 18);
+$('g1').innerHTML = svg('move', 16);
+$('g2').innerHTML = svg('jump', 16);
+$('g3').innerHTML = svg('rotate', 16);
+$('g4').innerHTML = svg('box', 16);
+$('g5').innerHTML = svg('chat', 16);
 
 /* ---------------------------------------------------------------- telegram nav */
 $('back').onclick = () => {
@@ -390,7 +480,10 @@ function zzzSprite() {
 const SPEED = 4.4;         // đơn vị mỗi giây
 /* Người chơi: vị trí là THẬT (lưu lên server) nên người khác thấy được mình
    đang đứng đâu; xoay mặt thì chỉ cục bộ. */
-const player = { x: 0, z: 0, y: 0, targetY: 0, ready: false, yaw: 0, moving: false };
+const player = { x: 0, z: 0, y: 0, targetY: 0, vy: 0, grounded: true,
+                 ready: false, yaw: 0, moving: false, sprint: false };
+const JUMP_V = 7.0;        // đủ để leo tường 2 tầng: cao ~1,36 khối
+const GRAV = 18;
 
 let ROWS = 2;              // số hàng lô đất (đổi theo số người)
 let WORLD = null;          // dữ liệu từ Worker
@@ -587,7 +680,25 @@ function updateGhost(point) {
   const c = hit.place;
   const ok = inMyPlot(c.x, c.z) && c.y >= 0 && c.y <= MAX_Y;
   hoverCell = { c, hit, ok };
-  if (mode === 'erase') { ghost.visible = false; ghostCell = null; return; }
+  if (mode === 'erase') {
+    // hiện đúng khối trên cùng của cột sẽ bị xoá
+    const cell = hit.onBlock ? { x: hit.block.x, z: hit.block.z } : hit.place;
+    let top = null;
+    for (const [, m] of blockMeshes) {
+      const b = m.userData;
+      if (b.x === cell.x && b.z === cell.z && b.owner === me()?.id) {
+        if (!top || b.y > top.y) top = b;
+      }
+    }
+    hoverCell = { c: cell, hit, ok: !!top };
+    if (!top) { ghost.visible = false; ghostCell = null; return; }
+    ghost.visible = true;
+    ghost.position.set(top.x + 0.5, top.y + 0.5, top.z + 0.5);
+    ghost.material.color.set(0xff5a5a);
+    ghost.material.opacity = 0.45;
+    ghostCell = { x: top.x, y: top.y, z: top.z };
+    return;
+  }
   ghost.visible = true;
   ghost.position.set(c.x + 0.5, c.y + 0.5, c.z + 0.5);
   ghost.material.color.set(ok ? 0xffffff : 0xff5a5a);
@@ -617,9 +728,17 @@ async function tap(point) {
   if (!hit) return;
 
   if (mode === 'erase') {
-    if (!hit.onBlock) { toast('Chạm vào khối để xoá'); return; }
-    const d = hit.block;
-    if (d.owner !== me()?.id) { toast('Chỉ xoá được khối của mình'); return; }
+    // Xoá khối TRÊN CÙNG của cột vừa chạm — trên điện thoại khó chạm trúng
+    // đúng khối khi chúng chồng lên nhau.
+    const cell = hit.onBlock ? { x: hit.block.x, z: hit.block.z } : hit.place;
+    let d = null;
+    for (const [, m] of blockMeshes) {
+      const b = m.userData;
+      if (b.x === cell.x && b.z === cell.z && b.owner === me()?.id) {
+        if (!d || b.y > d.y) d = b;
+      }
+    }
+    if (!d) { toast('Ở đó không có khối nào của mình'); return; }
     removeBlockMesh(d.x, d.y, d.z);
     restack(me()?.id);
     if (MY_PLOT >= 0 && d.x >= myOrigin().ox && d.x < myOrigin().ox + PLOT) myBlocks = Math.max(0, myBlocks - 1);
@@ -789,17 +908,30 @@ let t0 = 0;
 const camF = new THREE.Vector3(), camR = new THREE.Vector3();
 const stepV = new THREE.Vector3(), followT = new THREE.Vector3();
 
-/** Đi từng trục một (trượt dọc tường thay vì dính cứng). Chênh cao quá 1 khối
-    thì coi là tường — leo được 1 khối như bậc thềm. */
+/** Đi từng trục một (trượt dọc tường thay vì dính cứng).
+    Chỉ chặn khi khối cao HƠN mình quá ngưỡng — hụt chân thì rơi xuống, nên đi
+    được ra mép và nhảy xuống. Đang bay thì ngưỡng rộng hơn, nhờ vậy nhảy lên
+    được tường 2 tầng. */
 function moveBy(dx, dz) {
   const nx = player.x + dx, nz = player.z + dz;
   const cx = Math.floor(nx), cz = Math.floor(nz);
   if (cx < -10 || cz < -10 || cx > COLS * PLOT + 10 || cz > ROWS * PLOT + 10) return false;
   const h = topAt(cx, cz);
-  if (Math.abs(h - player.y) > 1.05) return false;
-  player.x = nx; player.z = nz; player.targetY = h;
+  if (h - player.y > (player.grounded ? 1.05 : 1.15)) return false;
+  player.x = nx; player.z = nz;
   return true;
 }
+
+/* ---------------------------------------------------------------- nhảy */
+function tryJump() {
+  if (!player.ready || !player.grounded) return;
+  player.vy = JUMP_V;
+  player.grounded = false;
+  if (inTg && tg.HapticFeedback) {
+    try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
+  }
+}
+$('jump').addEventListener('pointerdown', (e) => { e.preventDefault(); tryJump(); });
 
 function tick(now) {
   requestAnimationFrame(tick);
@@ -807,7 +939,9 @@ function tick(now) {
 
   /* ---- đi lại ---- */
   const mv = stickVec;
-  player.moving = player.ready && Math.hypot(mv.x, mv.y) > 0.14;
+  const mag = Math.hypot(mv.x, mv.y);
+  player.moving = player.ready && mag > 0.14;
+  player.sprint = player.moving && mag > 0.92;      // đẩy hết cỡ = chạy
   if (player.moving) {
     camera.getWorldDirection(camF); camF.y = 0;
     if (camF.lengthSq() < 1e-6) camF.set(0, 0, -1);
@@ -815,14 +949,32 @@ function tick(now) {
     camR.set(-camF.z, 0, camF.x);                       // phải của hướng nhìn
     stepV.set(0, 0, 0).addScaledVector(camF, -mv.y).addScaledVector(camR, mv.x);
     if (stepV.lengthSq() > 1e-6) {
-      stepV.normalize().multiplyScalar(SPEED * dt / 1000);
+      stepV.normalize().multiplyScalar(SPEED * (player.sprint ? 1.7 : 1) * dt / 1000);
       moveBy(stepV.x, 0);
       moveBy(0, stepV.z);
       player.yaw = Math.atan2(stepV.x, stepV.z);
       savePosSoon();
     }
   }
-  player.y += (player.targetY - player.y) * Math.min(1, dt / 85);   // lên/xuống êm
+  /* ---- trọng lực ---- */
+  if (player.ready) {
+    const ground = topAt(Math.floor(player.x), Math.floor(player.z));
+    player.targetY = ground;
+    if (player.grounded) {
+      if (ground > player.y + 0.02) {
+        player.y += (ground - player.y) * Math.min(1, dt / 85);     // bị đội lên
+      } else if (ground < player.y - 0.02) {
+        player.grounded = false; player.vy = 0;                     // hụt chân → rơi
+      } else {
+        player.y = ground;
+      }
+    }
+    if (!player.grounded) {
+      player.vy -= GRAV * dt / 1000;
+      player.y += player.vy * dt / 1000;
+      if (player.y <= ground) { player.y = ground; player.vy = 0; player.grounded = true; }
+    }
+  }
 
   /* ---- vẽ người ---- */
   const myId = me() && me().id;
@@ -846,7 +998,7 @@ function tick(now) {
       o.group.position.set(player.x, player.y, player.z);
       o.group.rotation.y = player.yaw;
       const L = o.group.userData.limbs;
-      const sw = player.moving ? Math.sin(now / 105) * 0.62 : 0;
+      const sw = player.moving ? Math.sin(now / (player.sprint ? 68 : 105)) * (player.sprint ? 0.8 : 0.62) : 0;
       if (L) {
         L.legL.rotation.x = sw; L.legR.rotation.x = -sw;
         L.armL.rotation.x = -sw * 0.75; L.armR.rotation.x = sw * 0.75;
@@ -856,6 +1008,13 @@ function tick(now) {
     } else {
       o.group.position.y = o.base + Math.sin(now / 700 + o.base) * 0.035;
     }
+  }
+
+  /* ---- bong bóng chat bám trên đầu ---- */
+  for (const [uid, b] of bubbles) {
+    const o = local.get(uid);
+    if (!o || now > b.until) { dropBubble(uid); continue; }
+    b.sprite.position.set(o.group.position.x, o.group.position.y + 3.4, o.group.position.z);
   }
 
   /* ---- camera bám nhân vật ---- */
@@ -922,8 +1081,209 @@ async function boot() {
     controls.target.set(ox + PLOT / 2, 1.2, oz + PLOT / 2);
     controls.update();
   }
+  // hướng dẫn lần đầu
+  let seenGuide = false;
+  try { seenGuide = !!localStorage.getItem('tg_world_guide_v1'); } catch (e) {}
+  if (!seenGuide) $('guide').hidden = false;
+  $('guideOk').onclick = () => {
+    try { localStorage.setItem('tg_world_guide_v1', '1'); } catch (e) {}
+    $('guide').hidden = true;
+    haptic('light');
+  };
+
   requestAnimationFrame(tick);
 }
+
+/* ---------------------------------------------------------------- chat trong game */
+const chatPanel = $('chatPanel'), chatList = $('chatList'), chatIn = $('chatIn');
+const chatBadge = $('chatBadge');
+let chatLast = 0, chatOpen = false, chatUnread = 0, chatBusy = false, chatReady = false;
+const chatSeen = new Set();
+
+/* bong bóng nói trên đầu nhân vật */
+const bubbleGroup = new THREE.Group();
+scene.add(bubbleGroup);
+const bubbles = new Map();          // uid -> { sprite, until, ... }
+const BUBBLE_MS = 7000;             // bong bóng nói hiện bao lâu
+
+/** Vẽ bong bóng nói: nền bo góc, đuôi nhọn, chữ ngắt dòng theo từ. */
+function bubbleSprite(text, hue) {
+  const fs = 40, pad = 18, maxW = 440, lh = fs + 10;
+  const cv = document.createElement('canvas');
+  let c = cv.getContext('2d');
+  c.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+
+  const words = String(text).split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (c.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; }
+    else cur = t;
+  }
+  if (cur) lines.push(cur);
+  const shown = lines.slice(0, 5);
+
+  const w = Math.ceil(Math.max(...shown.map((l) => c.measureText(l).width))) + pad * 2;
+  const h = shown.length * lh + pad * 2 - 10;
+  cv.width = w; cv.height = h + 22;                 // +22 cho đuôi nhọn
+  c = cv.getContext('2d');
+  c.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+
+  const r = 20, H = h;
+  c.fillStyle = 'rgba(10,16,26,.86)';
+  c.strokeStyle = `hsl(${hue == null ? 210 : hue} 55% 55% / .8)`;
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(r, 0); c.lineTo(w - r, 0); c.quadraticCurveTo(w, 0, w, r);
+  c.lineTo(w, H - r); c.quadraticCurveTo(w, H, w - r, H);
+  c.lineTo(w / 2 + 16, H); c.lineTo(w / 2, H + 18); c.lineTo(w / 2 - 16, H);  // đuôi
+  c.lineTo(r, H); c.quadraticCurveTo(0, H, 0, H - r);
+  c.lineTo(0, r); c.quadraticCurveTo(0, 0, r, 0);
+  c.closePath(); c.fill(); c.stroke();
+
+  c.fillStyle = '#ffffff';
+  c.textBaseline = 'middle';
+  shown.forEach((l, i) => c.fillText(l, pad, pad + i * lh + fs / 2 - 2));
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  const sc = 0.0105;
+  sp.scale.set(cv.width * sc, cv.height * sc, 1);
+  return sp;
+}
+
+function dropBubble(uid) {
+  const b = bubbles.get(uid);
+  if (!b) return;
+  bubbleGroup.remove(b.sprite);
+  if (b.sprite.material.map) b.sprite.material.map.dispose();
+  b.sprite.material.dispose();
+  bubbles.delete(uid);
+}
+
+function showBubble(m) {
+  if (!local.has(m.uid)) return;                  // người không có mặt trong thế giới
+  dropBubble(m.uid);
+  const sp = bubbleSprite(m.text, m.hue);
+  bubbleGroup.add(sp);
+  bubbles.set(m.uid, { sprite: sp, until: performance.now() + BUBBLE_MS });
+}
+
+/** Một dòng tin. Dùng textContent nên chữ người dùng gõ không thể thành HTML. */
+function chatRow(m, mine) {
+  const row = document.createElement('div');
+  row.className = 'chatRow' + (mine ? ' mine' : '');
+  if (!mine) {
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.style.color = 'hsl(' + (m.hue == null ? 210 : m.hue) + ' 62% 68%)';
+    who.textContent = m.name || 'Ai đó';
+    row.appendChild(who);
+  }
+  const tx = document.createElement('div');
+  tx.className = 'tx';
+  tx.textContent = m.text;
+  row.appendChild(tx);
+  return row;
+}
+
+function chatEmptyHint() {
+  if (chatSeen.size) return;
+  chatList.innerHTML = '<div class="empty">Chưa có tin nào.<br>Nói gì đó với mọi người đi!</div>';
+}
+
+function updateBadge() {
+  if (chatUnread > 0 && !chatOpen) {
+    chatBadge.hidden = false;
+    chatBadge.textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+  } else {
+    chatBadge.hidden = true;
+  }
+}
+
+function openChat(open) {
+  chatOpen = open;
+  chatPanel.classList.toggle('on', open);
+  if (open) {
+    chatUnread = 0; updateBadge();
+    chatList.scrollTop = chatList.scrollHeight;
+  } else {
+    stickReset();
+  }
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} }
+}
+$('chatBtn').onclick = () => openChat(!chatOpen);
+$('chatClose').onclick = () => openChat(false);
+
+async function pollChat() {
+  if (!inTg || !initData()) return;
+  const r = await get('/world/chat?initData=' + encodeURIComponent(initData()) + '&since=' + chatLast);
+  if (!r.ok || !r.body || !r.body.ok) return;
+  const msgs = r.body.messages || [];
+  if (r.body.last) chatLast = Math.max(chatLast, r.body.last);
+  if (!msgs.length) { if (!chatReady) { chatReady = true; chatEmptyHint(); } return; }
+
+  const mineId = me() && me().id;
+  const first = !chatReady;
+  chatReady = true;
+
+  // Gom những tin chưa thấy. KHÔNG bao giờ dựng lại cả danh sách: chỉ nối
+  // thêm — dựng lại từ lô vừa nhận sẽ nuốt mất tin cũ.
+  const fresh = [];
+  for (const m of msgs) {
+    if (chatSeen.has(m.id)) continue;
+    chatSeen.add(m.id);
+    fresh.push(m);
+  }
+  if (fresh.length && chatList.querySelector('.empty')) chatList.innerHTML = '';
+
+  let added = 0;
+  for (const m of fresh) {
+    chatList.appendChild(chatRow(m, m.uid === mineId));
+    if (first) continue;                         // lần đầu: nạp lịch sử, không báo
+    showBubble(m);
+    if (!chatOpen && m.uid !== mineId) added++;
+  }
+  if (first) chatEmptyHint();
+
+  while (chatList.children.length > 300) chatList.removeChild(chatList.firstChild);
+  if (chatOpen) chatList.scrollTop = chatList.scrollHeight;
+  if (added) { chatUnread += added; updateBadge(); }
+}
+
+async function sendChat() {
+  const text = chatIn.value.trim();
+  if (!text || chatBusy) return;
+  chatBusy = true; $('chatSend').disabled = true;
+  const r = await post('/world/chat', { initData: initData(), text });
+  chatBusy = false; $('chatSend').disabled = false;
+
+  if (r.ok && r.body && r.body.message) {
+    chatIn.value = '';
+    const m = r.body.message;
+    chatLast = Math.max(chatLast, m.id);
+    if (!chatSeen.has(m.id)) {
+      chatSeen.add(m.id);
+      if (chatList.querySelector('.empty')) chatList.innerHTML = '';
+      chatList.appendChild(chatRow(m, true));
+      chatList.scrollTop = chatList.scrollHeight;
+      showBubble(m);
+    }
+    if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
+  } else {
+    const e = r.body && r.body.error;
+    toast(e === 'too-fast' ? 'Từ từ thôi — 1 giây 1 tin'
+        : e === 'too-many' ? 'Bạn nhắn nhiều quá (tối đa 20 tin/phút)'
+        : e === 'not-resident' ? 'Bạn chưa có mặt trong thế giới này'
+        : 'Không gửi được tin');
+  }
+}
+$('chatSend').onclick = sendChat;
+chatIn.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+});
 
 /* ---------------------------------------------------------------- gần-thời-gian-thực
  * Hỏi /world/live mỗi 1,2 giây. Bản này RẤT NHẸ (chỉ vị trí + một số hiệu khối),
@@ -974,6 +1334,8 @@ if (inTg && initData()) {
   setInterval(() => post('/world/join', { initData: initData(), beat: true }), 45000);
   // nền tảng: cập nhật vị trí + phát hiện thay đổi
   setInterval(pollLive, 1200);
+  setInterval(pollChat, 1800);
+  pollChat();
   // lưới an toàn: làm mới toàn bộ dù không thấy thay đổi (mất mạng chớp, v.v.)
   setInterval(refreshWorld, 30000);
   pollLive();

@@ -27,6 +27,8 @@
  *   GET  /world                  -> cả thế giới (công khai: ai cũng xem được)
  *   POST /world/join             (body initData, x?, z?) -> ghi danh + nhịp sống + vị trí
  *   POST /world/block            (body initData + x,y,z + t|null) -> xây/xoá 1 khối
+ *   GET  /world/chat             (initData, since?)  -> tin nhắn trong game
+ *   POST /world/chat             (body initData + text) -> gửi tin
  *   GET  /world/live             -> BẢN NHẸ: vị trí mọi người + số hiệu khối,
  *                                   để app hỏi mỗi ~1 giây (realtime)
  *
@@ -109,6 +111,8 @@ async function route(request, url, env) {
 
   if (p === '/world' && request.method === 'GET') return worldState(env);
   if (p === '/world/live' && request.method === 'GET') return worldLive(env);
+  if (p === '/world/chat' && request.method === 'GET') return worldChatList(request, url, env);
+  if (p === '/world/chat' && request.method === 'POST') return worldChatSend(request, env);
   if (p === '/world/join' && request.method === 'POST') return worldJoin(request, env);
   if (p === '/world/block' && request.method === 'POST') return worldBlock(request, env);
 
@@ -590,6 +594,88 @@ async function worldJoin(request, env) {
     u.username || '', u.photo_url || '', now, px, pz, uid
   ).run();
   return json({ ok: true, joined: true, plot: ex.plot });
+}
+
+/* ------------------------------------------------------- chat trong thế giới */
+const CHAT_MAX_LEN = 200;      // dài tối đa mỗi tin
+const CHAT_KEEP = 300;         // chỉ giữ 300 tin gần nhất
+const CHAT_GAP_SEC = 1;        // cách nhau tối thiểu 1 giây
+const CHAT_PER_MIN = 20;       // trần mỗi phút
+
+/**
+ * Đọc tin nhắn mới hơn `since`. Chỉ CƯ DÂN đọc được (đã ghi danh trong
+ * world_members) — người ngoài thế giới không thấy chuyện trong này.
+ */
+async function worldChatList(request, url, env) {
+  const a = await authorize(request, url, env);
+  if (!a.ok) return json({ error: a.why }, 403);
+  const uid = a.user && a.user.id;
+  if (!uid) return json({ error: 'bad-signature' }, 403);
+
+  const me = await env.DB.prepare('SELECT user_id FROM world_members WHERE user_id = ?')
+    .bind(uid).first();
+  if (!me) return json({ error: 'not-resident' }, 403);
+
+  const since = Math.max(0, Number(url.searchParams.get('since') || 0) || 0);
+  const rows = await env.DB.prepare(
+    `SELECT id,user_id,name,hue,text,at FROM world_chat WHERE id > ? ORDER BY id LIMIT 100`
+  ).bind(since).all();
+  const top = await env.DB.prepare('SELECT COALESCE(MAX(id),0) AS m FROM world_chat').first();
+
+  return json({
+    ok: true,
+    last: top ? top.m : 0,
+    messages: (rows.results || []).map((r) => ({
+      id: r.id, uid: r.user_id, name: r.name, hue: r.hue, text: r.text, at: r.at,
+    })),
+  });
+}
+
+/** Gửi một tin. Kiểm cả chữ ký lẫn tư cách cư dân, rồi chặn spam. */
+async function worldChatSend(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+  const uid = v.user.id;
+
+  const res = await env.DB.prepare(
+    'SELECT name,hue FROM world_members WHERE user_id = ?').bind(uid).first();
+  if (!res) return json({ error: 'not-resident' }, 403);
+
+  const now = Math.floor(Date.now() / 1000);
+  const text = String(b.text || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_LEN);
+  if (!text) return json({ error: 'empty' }, 400);
+
+  const recent = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, COALESCE(MAX(at),0) AS last FROM world_chat
+      WHERE user_id = ? AND at > ?`
+  ).bind(uid, now - 60).first();
+  if (recent && now - recent.last < CHAT_GAP_SEC) {
+    return json({ error: 'too-fast', retry: CHAT_GAP_SEC }, 429);
+  }
+  if (recent && recent.n >= CHAT_PER_MIN) {
+    return json({ error: 'too-many', limit: CHAT_PER_MIN }, 429);
+  }
+
+  const ins = await env.DB.prepare(
+    `INSERT INTO world_chat (user_id,name,hue,text,at) VALUES (?,?,?,?,?)`
+  ).bind(uid, res.name || 'Ai đó', res.hue == null ? 0 : res.hue, text, now).run();
+
+  // dọn bớt: giữ 300 tin gần nhất để bảng không phình mãi
+  await env.DB.prepare(
+    `DELETE FROM world_chat WHERE id <= (SELECT COALESCE(MAX(id),0) - ? FROM world_chat)`
+  ).bind(CHAT_KEEP).run();
+
+  return json({
+    ok: true,
+    message: {
+      id: (ins.meta && ins.meta.last_row_id) || 0,
+      uid, name: res.name || 'Ai đó', hue: res.hue == null ? 0 : res.hue,
+      text, at: now,
+    },
+  });
 }
 
 /**

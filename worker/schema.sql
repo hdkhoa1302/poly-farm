@@ -88,3 +88,14 @@ CREATE TABLE IF NOT EXISTS world_blocks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_world_blocks_user ON world_blocks (user_id);
+
+CREATE TABLE IF NOT EXISTS world_chat (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name    TEXT    NOT NULL DEFAULT '',
+  hue     INTEGER NOT NULL DEFAULT 0,
+  text    TEXT    NOT NULL,
+  at      INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_world_chat_at ON world_chat (at);
