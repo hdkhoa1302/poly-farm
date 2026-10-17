@@ -39,21 +39,38 @@
   .tools{position:fixed;right:12px;top:calc(10px + env(safe-area-inset-top));display:flex;gap:8px;z-index:7}
   .tools .iconbtn{width:38px;height:38px;position:relative}
 
-  .dock{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(12px + env(safe-area-inset-bottom));
-        background:linear-gradient(to top,rgba(8,12,20,.92),rgba(8,12,20,.55),transparent);z-index:5}
-  .pal{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
-  .sw{width:38px;height:38px;border-radius:10px;border:2px solid rgba(255,255,255,.16);cursor:pointer;
+  .dock{position:fixed;left:0;right:0;bottom:0;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
+        background:linear-gradient(to top,rgba(8,12,20,.9),rgba(8,12,20,.45),transparent);z-index:8}
+  .dockRow{display:flex;align-items:center;justify-content:center;gap:10px}
+
+  /* một nút gọn thay cho cả hàng ô màu; bấm mới xổ ra bảng chọn khối */
+  .tool{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 8px;border-radius:12px;
+    border:1px solid var(--line);background:rgba(12,18,30,.62);backdrop-filter:blur(8px);
+    color:var(--ink);font:inherit;cursor:pointer}
+  .tool:active{transform:scale(.96)}
+  .tool .toolSw{width:26px;height:26px;border-radius:7px;border:1px solid rgba(255,255,255,.22);
+    display:grid;place-items:center;overflow:hidden}
+  .tool .toolSw svg{width:16px;height:16px}
+  .tool .toolName{font-size:13px;font-weight:600}
+  .tool .chev{width:14px;height:14px;color:var(--muted);transition:transform .18s var(--ease);display:block}
+  .tool.open .chev{transform:rotate(180deg)}
+  .cnt{font-size:11px;color:var(--muted)}
+  .cnt b{color:var(--text)}
+
+  .pal{display:none;gap:7px;justify-content:center;flex-wrap:wrap;margin-bottom:9px;
+    padding:9px;border-radius:14px;border:1px solid var(--line);
+    background:rgba(10,15,24,.92);backdrop-filter:blur(10px)}
+  .pal.open{display:flex}
+  .sw{width:36px;height:36px;border-radius:10px;border:2px solid rgba(255,255,255,.16);cursor:pointer;
       padding:0;position:relative;transition:transform .12s var(--ease),border-color .12s var(--ease)}
   .sw:active{transform:scale(.93)}
   .sw.on{border-color:#fff;transform:translateY(-3px);box-shadow:0 6px 16px rgba(0,0,0,.45)}
   .sw.eraser{background:rgba(255,255,255,.08);display:grid;place-items:center;color:var(--muted)}
   .sw.eraser.on{color:#ff6b6b;border-color:#ff6b6b}
   .sw.eraser svg{width:18px;height:18px;display:block;pointer-events:none}
-  .dock .note{margin-top:8px;text-align:center;font-size:11px;color:var(--muted);min-height:14px}
-  .dock .note b{color:var(--text)}
 
   /* cần điều khiển đi lại */
-  .stick{position:fixed;left:16px;bottom:calc(142px + env(safe-area-inset-bottom));width:106px;height:106px;
+  .stick{position:fixed;left:16px;bottom:calc(92px + env(safe-area-inset-bottom));width:106px;height:106px;
     border-radius:50%;border:1px solid var(--line);background:rgba(12,18,30,.42);backdrop-filter:blur(8px);
     touch-action:none;z-index:6;display:grid;place-items:center}
   .stick .knob{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.32);
@@ -62,7 +79,7 @@
   .stick .hint{position:absolute;bottom:-19px;left:0;right:0;text-align:center;font-size:10.5px;color:var(--muted)}
 
   /* nút nhảy — soi gương với cần điều khiển bên trái, chỗ ngón cái phải */
-  .jump{position:fixed;right:16px;bottom:calc(142px + env(safe-area-inset-bottom));width:72px;height:72px;
+  .jump{position:fixed;right:16px;bottom:calc(92px + env(safe-area-inset-bottom));width:72px;height:72px;
     border-radius:50%;border:1px solid var(--line);background:rgba(12,18,30,.42);backdrop-filter:blur(8px);
     display:grid;place-items:center;z-index:6;touch-action:none;color:var(--ink)}
   .jump:active{transform:scale(.93);background:rgba(30,42,64,.7)}
@@ -142,7 +159,14 @@
 
 <div class="dock">
   <div class="pal" id="pal"></div>
-  <div class="note" id="note"></div>
+  <div class="dockRow">
+    <button class="tool" id="tool">
+      <span class="toolSw" id="toolSw"></span>
+      <span class="toolName" id="toolName">Cỏ</span>
+      <span class="chev" id="toolChev"></span>
+    </button>
+    <span class="cnt" id="cnt"></span>
+  </div>
 </div>
 
 <div class="stick" id="stick"><div class="ring"></div><div class="knob" id="knob"></div><div class="hint">đi</div></div>
@@ -240,6 +264,7 @@ const ICONS = {
   'jump':'<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
   'close':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'send':'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  'chevron':'<path d="m6 9 6 6 6-6"/>',
   'move':'<path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3"/><path d="m9 19 3 3 3-3"/><path d="m5 9-3 3 3 3"/><path d="m19 9 3 3-3 3"/>',
   'rotate':'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
   'box':'<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
@@ -259,6 +284,7 @@ $('g2').innerHTML = svg('jump', 16);
 $('g3').innerHTML = svg('rotate', 16);
 $('g4').innerHTML = svg('box', 16);
 $('g5').innerHTML = svg('chat', 16);
+$('toolChev').innerHTML = svg('chevron', 14);
 
 /* ---------------------------------------------------------------- telegram nav */
 $('back').onclick = () => {
@@ -708,7 +734,10 @@ function updateGhost(point) {
 
 /* ---------------------------------------------------------------- chạm: xây / xoá */
 let down = null;
-canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+canvas.addEventListener('pointerdown', (e) => {
+  down = { x: e.clientX, y: e.clientY, t: Date.now() };
+  if (palOpen) setPal(false);            // chạm ra thế giới thì thu bảng chọn lại
+});
 canvas.addEventListener('pointermove', (e) => {
   if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;   // đang xoay
   if (e.pointerType === 'mouse') updateGhost({ x: e.clientX, y: e.clientY });
@@ -808,6 +837,41 @@ function restack(userId) {
 }
 
 /* ---------------------------------------------------------------- palette */
+/* Bảng chọn khối chỉ xổ ra khi bấm nút, không chiếm chỗ thường trực. */
+let palOpen = false;
+function setPal(open) {
+  palOpen = open === undefined ? !palOpen : open;
+  $('pal').classList.toggle('open', palOpen);
+  $('tool').classList.toggle('open', palOpen);
+}
+$('tool').onclick = () => { setPal(); stickReset(); haptic('sel'); };
+
+/* nhớ khối đã chọn cho lần sau */
+const PICK_KEY = 'tg_world_pick_v1';
+try {
+  const saved = localStorage.getItem(PICK_KEY);
+  if (saved && BLOCKS.some((b) => b.id === saved)) picked = saved;
+} catch (e) {}
+
+/** Vẽ lại nút công cụ: ô màu + tên, hoặc biểu tượng tẩy khi đang ở chế độ xoá. */
+function paintTool() {
+  const sw = $('toolSw');
+  if (mode === 'erase') {
+    sw.style.background = 'rgba(255,255,255,.08)';
+    sw.innerHTML = svg('eraser', 16);
+    sw.style.color = '#ff6b6b';
+    $('toolName').textContent = 'Xoá khối';
+  } else {
+    const b = BLOCKS.find((x) => x.id === picked) || BLOCKS[0];
+    sw.innerHTML = '';
+    sw.style.color = '';
+    sw.style.background = 'linear-gradient(160deg,#' + b.top.toString(16).padStart(6, '0') + ' 0 62%,#'
+      + b.side.toString(16).padStart(6, '0') + ' 62% 100%)';
+    $('toolName').textContent = b.name;
+  }
+  $('cnt').innerHTML = 'đã dùng <b>' + myBlocks + '/' + MAX_BLOCKS + '</b>';
+}
+
 function buildPalette() {
   const pal = $('pal');
   pal.innerHTML = '';
@@ -818,27 +882,23 @@ function buildPalette() {
     el.title = b.name;
     el.style.background = 'linear-gradient(160deg,#' + b.top.toString(16).padStart(6, '0') + ' 0 62%,#'
       + b.side.toString(16).padStart(6, '0') + ' 62% 100%)';
-    el.onclick = () => { picked = b.id; mode = 'build'; buildPalette(); haptic('sel'); };
+    el.onclick = () => {
+      picked = b.id; mode = 'build';
+      try { localStorage.setItem(PICK_KEY, b.id); } catch (e) {}
+      buildPalette(); setPal(false); haptic('sel');
+    };
     pal.appendChild(el);
   });
   const er = document.createElement('button');
   er.className = 'sw eraser' + (mode === 'erase' ? ' on' : '');
   er.type = 'button'; er.title = 'Xoá khối';
   er.innerHTML = svg('eraser', 18);
-  er.onclick = () => { mode = mode === 'erase' ? 'build' : 'erase'; buildPalette(); haptic('sel'); };
+  er.onclick = () => { mode = mode === 'erase' ? 'build' : 'erase'; buildPalette(); setPal(false); haptic('sel'); };
   pal.appendChild(er);
   updateNote();
 }
 
-function updateNote() {
-  if (mode === 'erase') {
-    $('note').innerHTML = 'Đang ở chế độ <b>xoá</b> — chạm vào khối của mình để bỏ';
-  } else {
-    const b = BLOCKS.find(x => x.id === picked);
-    $('note').innerHTML = 'Đang xây bằng <b>' + (b ? b.name : '') + '</b> · đã dùng <b>'
-      + myBlocks + '/' + MAX_BLOCKS + '</b> khối · chạm vào đất trong lô của mình';
-  }
-}
+function updateNote() { paintTool(); }
 
 /* ---------------------------------------------------------------- nút góc */
 $('home').onclick = () => {
