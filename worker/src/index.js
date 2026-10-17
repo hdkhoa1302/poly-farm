@@ -14,14 +14,27 @@
  * Endpoint:
  *   GET  /health
  *   POST /ingest                 (header X-Ingest-Secret) — writer đẩy 1 kỳ
- *   GET  /digests?initData=…     -> [{n,title,from,to,msgs}]
- *   GET  /digest/:n?initData=…   -> {n,title,body,from,to,msgs}
- *   GET  /lb/:appId              -> [{name,username,photo,score}]
+ *   POST /resolve                (header X-Ingest-Secret) — chốt yêu cầu chủ động
+ *   GET  /digests?initData=…&limit=10&offset=0 -> {digests,total,hasMore}
+ *   GET  /digest/:n?initData=…   -> {n,title,body,from,to,msgs,manual}
+ *   POST /request                (body JSON có initData) — xin lấy ngay 1 kỳ
+ *   GET  /request?initData=…     -> trạng thái + có được xin hay không
+ *   GET  /lb/:appId              -> [{name,username,photo,score,pid}]
  *   POST /lb/:appId              (body JSON có initData) -> upsert điểm
+ *
+ * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
+ * nên Worker chỉ GHI YÊU CẦU vào hàng đợi; cron ở máy nhặt rồi chạy.
+ * Vì vậy phải có trần: cooldown, số kỳ/ngày, và không nhận chồng yêu cầu —
+ * nếu không, bấm liên tục sẽ đẻ ra hàng loạt kỳ rác trong sổ.
  */
 
 const CORS_METHODS = 'GET,POST,OPTIONS';
 const CORS_HEADERS = 'Content-Type,X-Ingest-Secret';
+
+/* Trần cho "lấy ngay" — chỉnh ở đây, app tự đọc qua GET /request */
+const COOLDOWN_SEC = 600;        // cách nhau tối thiểu 10 phút
+const MAX_MANUAL_PER_DAY = 6;    // tối đa 6 kỳ chủ động mỗi ngày (UTC)
+const MIN_MANUAL_MSGS = 3;       // dưới mức này coi như chưa có gì để ghi
 
 export default {
   async fetch(request, env) {
@@ -59,6 +72,12 @@ async function route(request, url, env) {
   if (p === '/health') return json({ ok: true, ts: Date.now() });
 
   if (p === '/ingest' && request.method === 'POST') return ingest(request, env);
+
+  if (p === '/resolve' && request.method === 'POST') return resolveRequest(request, env);
+
+  if (p === '/request') {
+    return request.method === 'POST' ? askForDigest(request, env) : requestState(request, url, env);
+  }
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -148,21 +167,36 @@ async function ingest(request, env) {
   const body = String(b.body || '');
   if (!body) return json({ error: 'empty body' }, 400);
 
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  // Kỳ này có phải do thành viên bấm "Lấy ngay" không? Nếu có thì đánh dấu
+  // manual và chốt luôn yêu cầu đang chờ (để app biết đã xong).
+  const pend = await env.DB.prepare(
+    `SELECT id FROM requests WHERE status='pending' ORDER BY created_at LIMIT 1`
+  ).first();
+  const manual = pend ? 1 : 0;
+
   await env.DB.prepare(
-    `INSERT INTO digests (n,title,body,from_ts,to_ts,msg_count,chat_title,created_at)
-     VALUES (?,?,?,?,?,?,?,?)
+    `INSERT INTO digests (n,title,body,from_ts,to_ts,msg_count,chat_title,created_at,manual)
+     VALUES (?,?,?,?,?,?,?,?,?)
      ON CONFLICT(n) DO UPDATE SET
        title=excluded.title, body=excluded.body, from_ts=excluded.from_ts,
        to_ts=excluded.to_ts, msg_count=excluded.msg_count,
-       chat_title=excluded.chat_title`
+       chat_title=excluded.chat_title, manual=excluded.manual`
   ).bind(
     n, title, body,
     Math.floor(Number(b.from) || 0), Math.floor(Number(b.to) || 0),
     Math.floor(Number(b.msgs) || 0), String(b.chatTitle || '').slice(0, 200),
-    Math.floor(Date.now() / 1000)
+    nowSec, manual
   ).run();
 
-  return json({ ok: true, n });
+  if (pend) {
+    await env.DB.prepare(
+      `UPDATE requests SET status='done', digest_n=?, resolved_at=? WHERE id=?`
+    ).bind(n, nowSec, pend.id).run();
+  }
+
+  return json({ ok: true, n, manual });
 }
 
 /* --------------------------------------------------------------- digest */
@@ -170,11 +204,22 @@ async function listDigests(request, url, env) {
   const a = await authorize(request, url, env);
   if (!a.ok) return json({ error: a.why }, 403);
 
+  // Phân trang: app đọc từng đợt để mở nhanh, cuộn tới đâu tải tới đó
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '10', 10) || 10, 1), 50);
+  const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0);
+
   const { results } = await env.DB.prepare(
-    `SELECT n,title,from_ts AS "from",to_ts AS "to",msg_count AS msgs
-       FROM digests ORDER BY n DESC LIMIT 200`
-  ).all();
-  return json({ ok: true, who: publicUser(a.user), digests: results || [] });
+    `SELECT n,title,from_ts AS "from",to_ts AS "to",msg_count AS msgs,manual
+       FROM digests ORDER BY n DESC LIMIT ? OFFSET ?`
+  ).bind(limit, offset).all();
+
+  const cnt = await env.DB.prepare('SELECT COUNT(*) AS c FROM digests').first();
+  const total = cnt ? cnt.c : (results || []).length;
+
+  return json({
+    ok: true, who: publicUser(a.user), digests: results || [],
+    total, limit, offset, hasMore: offset + (results || []).length < total,
+  });
 }
 
 async function oneDigest(request, url, env, n) {
@@ -182,11 +227,112 @@ async function oneDigest(request, url, env, n) {
   if (!a.ok) return json({ error: a.why }, 403);
 
   const row = await env.DB.prepare(
-    `SELECT n,title,body,from_ts AS "from",to_ts AS "to",msg_count AS msgs
+    `SELECT n,title,body,from_ts AS "from",to_ts AS "to",msg_count AS msgs,manual
        FROM digests WHERE n = ?`
   ).bind(n).first();
   if (!row) return json({ error: 'not-found' }, 404);
   return json({ ok: true, digest: row });
+}
+
+/* ------------------------------------------------------- lấy ngay 1 kỳ */
+/** Trạng thái hàng đợi + có được xin hay không (app đọc để bật/tắt nút). */
+async function requestSummary(env) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const pend = await env.DB.prepare(
+    `SELECT id,created_at,user_id FROM requests WHERE status='pending'
+      ORDER BY created_at LIMIT 1`
+  ).first();
+  const lastDone = await env.DB.prepare(
+    `SELECT resolved_at,digest_n FROM requests WHERE status='done'
+      ORDER BY resolved_at DESC LIMIT 1`
+  ).first();
+
+  const dayStart = nowSec - (nowSec % 86400);          // đầu ngày UTC
+  const cnt = await env.DB.prepare(
+    `SELECT COUNT(*) AS c FROM requests WHERE status='done' AND resolved_at >= ?`
+  ).bind(dayStart).first();
+  const usedToday = cnt ? cnt.c : 0;
+
+  let canRequest = true, why = '', retryIn = 0;
+  if (pend) {
+    canRequest = false;
+    why = 'pending';
+    retryIn = Math.max(0, COOLDOWN_SEC - (nowSec - pend.created_at));
+  } else if (lastDone && nowSec - lastDone.resolved_at < COOLDOWN_SEC) {
+    canRequest = false;
+    why = 'cooldown';
+    retryIn = COOLDOWN_SEC - (nowSec - lastDone.resolved_at);
+  } else if (usedToday >= MAX_MANUAL_PER_DAY) {
+    canRequest = false;
+    why = 'daily-limit';
+  }
+
+  return {
+    pending: !!pend,
+    pendingSince: pend ? pend.created_at : null,
+    canRequest, why, retryIn,
+    cooldownSec: COOLDOWN_SEC,
+    maxPerDay: MAX_MANUAL_PER_DAY,
+    usedToday,
+    minMsgs: MIN_MANUAL_MSGS,
+    lastManualN: lastDone ? lastDone.digest_n : null,
+  };
+}
+
+async function requestState(request, url, env) {
+  const a = await authorize(request, url, env);
+  if (!a.ok) return json({ error: a.why }, 403);
+  return json({ ok: true, state: await requestSummary(env) });
+}
+
+async function askForDigest(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v) return json({ error: 'bad-signature' }, 403);
+  if (v.expired) return json({ error: 'expired' }, 403);
+
+  const uid = v.user && v.user.id;
+  const inGroup = v.chat && String(v.chat.id) === String(env.GROUP_ID);
+  let allowed = inGroup;
+  if (!allowed && uid) {
+    const row = await env.DB
+      .prepare('SELECT user_id FROM members WHERE user_id = ?').bind(uid).first();
+    allowed = !!row;
+  }
+  if (!allowed) return json({ error: 'not-member' }, 403);
+
+  const st = await requestSummary(env);
+  if (!st.canRequest) {
+    // 429 để app phân biệt "chưa được" với lỗi thật
+    return json({ error: st.why, state: st }, 429);
+  }
+
+  const name = publicUser(v.user).name.slice(0, 64);
+  const id = await env.DB.prepare(
+    `INSERT INTO requests (user_id,name,created_at,status) VALUES (?,?,?,'pending')`
+  ).bind(uid || 0, name, Math.floor(Date.now() / 1000)).run();
+
+  return json({ ok: true, id: id.meta ? id.meta.last_row_id : null,
+                state: await requestSummary(env) }, 202);
+}
+
+/** Cron ở máy gọi khi KHÔNG tạo được kỳ (quá ít tin…) để gỡ yêu cầu khỏi hàng đợi. */
+async function resolveRequest(request, env) {
+  if (!env.INGEST_SECRET) return json({ error: 'disabled' }, 503);
+  if (request.headers.get('X-Ingest-Secret') !== env.INGEST_SECRET) {
+    return json({ error: 'forbidden' }, 403);
+  }
+  let b = {};
+  try { b = await request.json(); } catch {}
+  const status = b.status === 'done' ? 'done' : 'rejected';
+  const reason = String(b.reason || '').slice(0, 120);
+  const r = await env.DB.prepare(
+    `UPDATE requests SET status=?, reason=?, resolved_at=?
+      WHERE status='pending'`
+  ).bind(status, reason, Math.floor(Date.now() / 1000)).run();
+  return json({ ok: true, resolved: r.meta ? r.meta.changes : 0, status, reason });
 }
 
 function publicUser(u) {
