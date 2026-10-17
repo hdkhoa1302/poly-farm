@@ -62,3 +62,29 @@ CREATE INDEX IF NOT EXISTS idx_scores_app ON scores (app_id, score DESC);
 
 -- chủ sở hữu: luôn có quyền đọc sổ tay
 INSERT OR IGNORE INTO members (user_id, name, added_at) VALUES (780469718, 'owner', 0);
+
+-- ============ Thế Giới Của Ae (app three.js voxel) ============
+-- Mỗi thành viên một lô đất; khối xây lưu theo từng ô.
+CREATE TABLE IF NOT EXISTS world_members (
+  user_id    INTEGER PRIMARY KEY,
+  name       TEXT    NOT NULL DEFAULT '',
+  username   TEXT    NOT NULL DEFAULT '',
+  photo      TEXT    NOT NULL DEFAULT '',
+  hue        INTEGER NOT NULL DEFAULT 0,     -- màu riêng, tính từ user id
+  plot       INTEGER NOT NULL DEFAULT -1,    -- thứ tự lô đất trong lưới
+  first_seen INTEGER NOT NULL DEFAULT 0,
+  last_seen  INTEGER NOT NULL DEFAULT 0,
+  visits     INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS world_blocks (
+  user_id INTEGER NOT NULL,
+  x       INTEGER NOT NULL,
+  y       INTEGER NOT NULL,
+  z       INTEGER NOT NULL,
+  t       TEXT    NOT NULL DEFAULT 'grass',
+  at      INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, x, y, z)
+);
+
+CREATE INDEX IF NOT EXISTS idx_world_blocks_user ON world_blocks (user_id);

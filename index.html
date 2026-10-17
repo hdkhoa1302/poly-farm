@@ -386,6 +386,16 @@ const APPS = [
     path: 'so-tay-nhom/',
     url: 'https://hdkhoa1302.github.io/poly-farm/so-tay-nhom/'
   }
+  {
+    id: 'the-gioi',
+    name: 'Thế Giới Của Ae',
+    icon: 'blocks',
+    tint: 190,
+    ink: 55, inkLight: 38,
+    desc: 'Ai ghé Hub cũng có một lô đất — xây bằng khối, vắng thì nằm ngủ',
+    path: 'the-gioi/',
+    url: 'https://hdkhoa1302.github.io/poly-farm/the-gioi/'
+  }
   // {
   //   id: 'tetris',
   //   name: 'Tetris',
@@ -699,6 +709,20 @@ document.getElementById('manage').addEventListener('click', () => {
 
 render();
 loadDeleted();
+
+/* ---------------- ghi danh vào "Thế Giới Của Ae" ----------------
+ * Ai ghé Hub cũng thành một cư dân trong thế giới 3D (có lô đất riêng),
+ * kể cả khi chưa từng mở app đó. Chỉ gửi khi có chữ ký Telegram; lỗi thì
+ * bỏ qua trong im lặng, không làm phiền người dùng.
+ */
+(function joinWorld() {
+  if (!inTg || !myInit() || !myId()) return;
+  fetch(API + '/world/join', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: myInit() })
+  }).catch(() => {});
+})();
 
 /* ---------------- mở app ---------------- */
 /* Khi nhảy sang trang con trong cùng webview, URL mất phần hash launch params

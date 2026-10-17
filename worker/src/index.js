@@ -24,6 +24,9 @@
  *   GET  /apps                   -> {deleted:[appId…]}  (công khai: hub đọc trước khi đăng nhập)
  *   POST /apps/delete            (body initData + id)   -> chỉ OWNER_ID
  *   POST /apps/restore           (body initData + id)   -> chỉ OWNER_ID
+ *   GET  /world                  -> cả thế giới (công khai: ai cũng xem được)
+ *   POST /world/join             (body initData)        -> ghi danh + cập nhật nhịp sống
+ *   POST /world/block            (body initData + x,y,z + t|null) -> xây/xoá 1 khối
  *
  * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
  * nên Worker chỉ GHI YÊU CẦU vào hàng đợi; cron ở máy nhặt rồi chạy.
@@ -38,6 +41,14 @@ const CORS_HEADERS = 'Content-Type,X-Ingest-Secret';
 const COOLDOWN_SEC = 600;        // cách nhau tối thiểu 10 phút
 const MAX_MANUAL_PER_DAY = 6;    // tối đa 6 kỳ chủ động mỗi ngày (UTC)
 const MIN_MANUAL_MSGS = 3;       // dưới mức này coi như chưa có gì để ghi
+
+/* --- Thế Giới Của Ae: hình học phải KHỚP với app (the-gioi/index.html) --- */
+const PLOT = 8;                  // lô đất mỗi cạnh bao nhiêu ô
+const PLOT_COLS = 6;             // mấy lô trên một hàng
+const MAX_Y = 12;                // xây cao tối đa
+const MAX_BLOCKS = 250;          // trần số khối mỗi người
+const SLEEP_SEC = 120;           // quá 2 phút không thấy nhịp sống = đang ngủ
+const BLOCK_TYPES = ['grass', 'dirt', 'stone', 'wood', 'brick', 'sand', 'leaf', 'glass'];
 
 export default {
   async fetch(request, env) {
@@ -85,6 +96,10 @@ async function route(request, url, env) {
   if (p === '/apps') return listDeleted(env);
   if (p === '/apps/delete' && request.method === 'POST') return deleteApp(request, env);
   if (p === '/apps/restore' && request.method === 'POST') return restoreApp(request, env);
+
+  if (p === '/world' && request.method === 'GET') return worldState(env);
+  if (p === '/world/join' && request.method === 'POST') return worldJoin(request, env);
+  if (p === '/world/block' && request.method === 'POST') return worldBlock(request, env);
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -439,4 +454,141 @@ async function restoreApp(request, env) {
   if (r.err) return r.err;
   await env.DB.prepare('DELETE FROM deleted_apps WHERE app_id = ?').bind(r.id).run();
   return json({ ok: true, restored: r.id });
+}
+
+/* ------------------------------------------------- Thế Giới Của Ae */
+/** Gốc lô đất thứ `plot` trong lưới. PHẢI khớp với app. */
+function plotOrigin(plot) {
+  const col = ((plot % PLOT_COLS) + PLOT_COLS) % PLOT_COLS;
+  const row = Math.floor(plot / PLOT_COLS);
+  return { ox: col * PLOT, oz: row * PLOT };
+}
+
+/** Cả thế giới: thành viên + khối họ đã xây. Công khai — ai cũng xem được. */
+async function worldState(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const mem = await env.DB.prepare(
+    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits
+       FROM world_members ORDER BY plot`
+  ).all();
+  const blk = await env.DB.prepare(
+    `SELECT user_id,x,y,z,t FROM world_blocks ORDER BY user_id, y, z, x LIMIT 8000`
+  ).all();
+
+  const byUser = {};
+  for (const b of blk.results || []) {
+    (byUser[b.user_id] = byUser[b.user_id] || []).push({ x: b.x, y: b.y, z: b.z, t: b.t });
+  }
+  return json({
+    ok: true,
+    now,
+    plot: PLOT, cols: PLOT_COLS, maxY: MAX_Y, maxBlocks: MAX_BLOCKS, sleepSec: SLEEP_SEC,
+    members: (mem.results || []).map((m) => ({
+      id: m.user_id, name: m.name, username: m.username, photo: m.photo,
+      hue: m.hue, plot: m.plot,
+      firstSeen: m.first_seen, lastSeen: m.last_seen, visits: m.visits,
+      asleep: (now - m.last_seen) > SLEEP_SEC,
+      blocks: byUser[m.user_id] || [],
+    })),
+  });
+}
+
+/**
+ * Ghi danh / cập nhật nhịp sống.
+ *   {initData}              -> ghi danh đầy đủ, tăng số lần ghé, cấp lô nếu mới
+ *   {initData, beat:true}   -> chỉ gia hạn nhịp sống (app gọi mỗi ~45 giây)
+ * Lô đất cấp theo thứ tự ghé đầu tiên, không đổi về sau.
+ */
+async function worldJoin(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+
+  const u = v.user;
+  const uid = u.id;
+  const now = Math.floor(Date.now() / 1000);
+  const beat = b.beat === true;
+
+  const ex = await env.DB.prepare('SELECT plot FROM world_members WHERE user_id = ?').bind(uid).first();
+  if (!ex) {
+    if (beat) return json({ ok: true, joined: false });
+    const c = await env.DB.prepare('SELECT COUNT(*) AS c FROM world_members').first();
+    const plot = c ? c.c : 0;
+    const hue = Math.abs(Number(uid) * 47) % 360;      // màu ổn định theo user id
+    const name = ([u.first_name, u.last_name].filter(Boolean).join(' ').trim()
+                  || u.username || 'Ai đó').slice(0, 64);
+    await env.DB.prepare(
+      `INSERT INTO world_members (user_id,name,username,photo,hue,plot,first_seen,last_seen,visits)
+       VALUES (?,?,?,?,?,?,?,?,1)`
+    ).bind(uid, name, u.username || '', u.photo_url || '', hue, plot, now, now).run();
+    return json({ ok: true, joined: true, plot, isNew: true });
+  }
+
+  if (beat) {
+    await env.DB.prepare('UPDATE world_members SET last_seen = ? WHERE user_id = ?').bind(now, uid).run();
+    return json({ ok: true, joined: true, beat: true, plot: ex.plot });
+  }
+
+  await env.DB.prepare(
+    `UPDATE world_members SET name=?, username=?, photo=?, last_seen=?, visits=visits+1
+      WHERE user_id = ?`
+  ).bind(
+    ([u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || 'Ai đó').slice(0, 64),
+    u.username || '', u.photo_url || '', now, uid
+  ).run();
+  return json({ ok: true, joined: true, plot: ex.plot });
+}
+
+/**
+ * Xây / xoá một khối. CHỈ trong lô của mình — kiểm ở server, không tin app.
+ * t = null  → xoá khối;  t = loại khối → đặt.
+ */
+async function worldBlock(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+  const uid = v.user.id;
+
+  const m = await env.DB.prepare('SELECT plot FROM world_members WHERE user_id = ?').bind(uid).first();
+  if (!m) return json({ error: 'not-joined' }, 403);
+
+  const x = Math.floor(Number(b.x)), y = Math.floor(Number(b.y)), z = Math.floor(Number(b.z));
+  if (![x, y, z].every(Number.isFinite)) return json({ error: 'bad coords' }, 400);
+
+  const { ox, oz } = plotOrigin(m.plot);
+  if (x < ox || x >= ox + PLOT || z < oz || z >= oz + PLOT || y < 0 || y > MAX_Y) {
+    return json({ error: 'outside-plot' }, 403);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+
+  if (b.t == null) {                                   // xoá
+    await env.DB.prepare(
+      'DELETE FROM world_blocks WHERE user_id = ? AND x = ? AND y = ? AND z = ?'
+    ).bind(uid, x, y, z).run();
+    return json({ ok: true, removed: true });
+  }
+
+  const t = String(b.t).slice(0, 16);
+  if (!BLOCK_TYPES.includes(t)) return json({ error: 'bad type' }, 400);
+
+  const c = await env.DB.prepare('SELECT COUNT(*) AS c FROM world_blocks WHERE user_id = ?').bind(uid).first();
+  const have = c ? c.c : 0;
+  const isUpdate = await env.DB.prepare(
+    'SELECT 1 FROM world_blocks WHERE user_id = ? AND x = ? AND y = ? AND z = ?'
+  ).bind(uid, x, y, z).first();
+  if (!isUpdate && have >= MAX_BLOCKS) {
+    return json({ error: 'block-limit', limit: MAX_BLOCKS, have }, 429);
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO world_blocks (user_id,x,y,z,t,at) VALUES (?,?,?,?,?,?)
+     ON CONFLICT(user_id,x,y,z) DO UPDATE SET t = excluded.t, at = excluded.at`
+  ).bind(uid, x, y, z, t, now).run();
+
+  return json({ ok: true, placed: true, blocks: isUpdate ? have : have + 1 });
 }
