@@ -665,7 +665,10 @@ async function post(path, body) {
 }
 async function get(path) {
   try {
-    const r = await fetch(API + path);
+    // cache:'no-store' + tham số phá cache là hai lớp: chỉ dựa vào header của
+    // server thì một proxy trung gian vẫn có thể trả bản cũ.
+    const sep = path.indexOf('?') < 0 ? '?' : '&';
+    const r = await fetch(API + path + sep + '_=' + Date.now(), { cache: 'no-store' });
     return { ok: r.ok, status: r.status, body: await r.json() };
   } catch (e) { return { ok: false, status: 0, body: null }; }
 }
@@ -765,14 +768,20 @@ stickEl.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) st
 stickEl.addEventListener('pointerup', (e) => { if (e.pointerId === stickId) { stickReset(); savePosSoon(); } });
 stickEl.addEventListener('pointercancel', () => stickReset());
 
-/* Lưu chỗ đang đứng lên server (gộp nhiều lần di chuyển thành 1 lần gửi) */
-let posTimer = null;
+/* Gửi chỗ đang đứng lên server. Gộp theo NHỊP (~3 lần/giây) chứ không phải
+   gộp-rồi-chờ: gộp 1 giây thì người khác thấy mình nhảy từng khúc. */
+let posTimer = null, posLast = 0;
+function sendPos() {
+  if (!inTg || !initData() || !player.ready) return;
+  posLast = Date.now();
+  post('/world/join', { initData: initData(), beat: true, x: player.x, z: player.z });
+}
 function savePosSoon() {
   if (!inTg || !initData() || !player.ready) return;
+  const gap = Date.now() - posLast;
+  if (gap > 340) { sendPos(); return; }
   clearTimeout(posTimer);
-  posTimer = setTimeout(() => {
-    post('/world/join', { initData: initData(), beat: true, x: player.x, z: player.z });
-  }, 1000);
+  posTimer = setTimeout(sendPos, 340 - gap);      // gửi nốt sau khi dừng
 }
 
 /* ---------------------------------------------------------------- vòng lặp */
@@ -824,6 +833,14 @@ function tick(now) {
         o.zzz.material.opacity = 0.55 + Math.sin(now / 620) * 0.35;
       }
       continue;
+    }
+    // người khác: trượt dần tới vị trí mới nhất (server chỉ ~1 giây/lần)
+    if (id !== myId && o.tx != null) {
+      o.group.position.x += (o.tx - o.group.position.x) * 0.2;
+      o.group.position.z += (o.tz - o.group.position.z) * 0.2;
+      o.label.position.x = o.group.position.x;
+      o.label.position.z = o.group.position.z;
+      if (o.zzz) { o.zzz.position.x = o.group.position.x + 1.1; o.zzz.position.z = o.group.position.z + 0.4; }
     }
     if (id === myId && player.ready) {
       o.group.position.set(player.x, player.y, player.z);
@@ -908,19 +925,58 @@ async function boot() {
   requestAnimationFrame(tick);
 }
 
-/* giữ nhịp sống + làm mới thế giới định kỳ (người khác vào/ngủ vẫn thấy đúng) */
-if (inTg && initData()) {
-  setInterval(() => post('/world/join',
-    { initData: initData(), beat: true, x: player.x, z: player.z }), 45000);
-  setInterval(async () => {
+/* ---------------------------------------------------------------- gần-thời-gian-thực
+ * Hỏi /world/live mỗi 1,2 giây. Bản này RẤT NHẸ (chỉ vị trí + một số hiệu khối),
+ * nên hỏi liên tục vẫn rẻ. Chỉ khi số hiệu khối đổi, hoặc có người vào/ngủ, mới
+ * tải lại toàn bộ thế giới — nên việc xây của người khác hiện ra gần như ngay.
+ */
+let lastRev = null;
+let refreshing = false;
+
+async function refreshWorld() {
+  if (refreshing) return;
+  refreshing = true;
+  try {
     const w = await get('/world');
     if (w.ok && w.body) {
-      const prev = WORLD; WORLD = w.body;
-      const changed = JSON.stringify(prev && prev.members.map(m => [m.id, m.lastSeen, (m.blocks||[]).length]))
-                   !== JSON.stringify(WORLD.members.map(m => [m.id, m.lastSeen, (m.blocks||[]).length]));
-      if (changed) renderWorld();
+      WORLD = w.body;
+      renderWorld();           // vẽ lại khối + người; người khác giữ nguyên vị trí
     }
-  }, 30000);
+  } finally { refreshing = false; }
+}
+
+async function pollLive() {
+  const r = await get('/world/live');
+  if (!r.ok || !r.body) return;
+  const d = r.body;
+  const myId = me() && me().id;
+
+  let needFull = false;
+  if (lastRev !== null && d.rev !== lastRev) needFull = true;
+  lastRev = d.rev;
+
+  const alive = new Set();
+  for (const m of d.members) {
+    alive.add(m.id);
+    if (m.id === myId) continue;
+    const o = local.get(m.id);
+    if (!o) { needFull = true; continue; }                    // người mới vào
+    if (o.asleep !== !!m.asleep) { needFull = true; continue; } // vừa ngủ / vừa thức
+    if (m.x != null && m.z != null) { o.tx = m.x; o.tz = m.z; }
+  }
+  if (local.size !== alive.size) needFull = true;             // có người rời đi
+
+  if (needFull) await refreshWorld();
+}
+
+if (inTg && initData()) {
+  // nhịp sống khi không đi đâu (đứng yên vẫn phải báo là còn thức)
+  setInterval(() => post('/world/join', { initData: initData(), beat: true }), 45000);
+  // nền tảng: cập nhật vị trí + phát hiện thay đổi
+  setInterval(pollLive, 1200);
+  // lưới an toàn: làm mới toàn bộ dù không thấy thay đổi (mất mạng chớp, v.v.)
+  setInterval(refreshWorld, 30000);
+  pollLive();
 }
 
 boot();

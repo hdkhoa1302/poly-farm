@@ -27,6 +27,8 @@
  *   GET  /world                  -> cả thế giới (công khai: ai cũng xem được)
  *   POST /world/join             (body initData, x?, z?) -> ghi danh + nhịp sống + vị trí
  *   POST /world/block            (body initData + x,y,z + t|null) -> xây/xoá 1 khối
+ *   GET  /world/live             -> BẢN NHẸ: vị trí mọi người + số hiệu khối,
+ *                                   để app hỏi mỗi ~1 giây (realtime)
  *
  * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
  * nên Worker chỉ GHI YÊU CẦU vào hàng đợi; cron ở máy nhặt rồi chạy.
@@ -58,6 +60,7 @@ export default {
       'Access-Control-Allow-Methods': CORS_METHODS,
       'Access-Control-Allow-Headers': CORS_HEADERS,
       'Access-Control-Max-Age': '86400',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     try {
@@ -74,10 +77,17 @@ function addCors(res, cors) {
   for (const k in cors) h.set(k, cors[k]);
   return new Response(res.body, { status: res.status, headers: h });
 }
+/* Mọi response đều cấm cache. /world/live được hỏi ~1 giây/lần; nếu thiếu
+   Cache-Control thì trình duyệt tự suy ra được phép cache và app cứ nhận dữ
+   liệu cũ dù hỏi liên tục — đúng triệu chứng "không cập nhật realtime". */
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+    },
   });
 }
 
@@ -98,6 +108,7 @@ async function route(request, url, env) {
   if (p === '/apps/restore' && request.method === 'POST') return restoreApp(request, env);
 
   if (p === '/world' && request.method === 'GET') return worldState(env);
+  if (p === '/world/live' && request.method === 'GET') return worldLive(env);
   if (p === '/world/join' && request.method === 'POST') return worldJoin(request, env);
   if (p === '/world/block' && request.method === 'POST') return worldBlock(request, env);
 
@@ -490,6 +501,33 @@ async function worldState(env) {
       posX: m.pos_x == null ? null : m.pos_x, posZ: m.pos_z == null ? null : m.pos_z,
       asleep: (now - m.last_seen) > SLEEP_SEC,
       blocks: byUser[m.user_id] || [],
+    })),
+  });
+}
+
+/**
+ * Bản NHẸ để hỏi liên tục: chỉ vị trí + trạng thái ngủ của mọi người, và một
+ * "số hiệu khối" (rev). App so rev — chỉ khi rev đổi mới tải lại toàn bộ khối,
+ * nên phần hỏi mỗi giây rất rẻ.
+ */
+async function worldLive(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const mem = await env.DB.prepare(
+    `SELECT user_id,pos_x,pos_z,last_seen FROM world_members`
+  ).all();
+  const rev = await env.DB.prepare(
+    `SELECT COALESCE(MAX(at),0) AS m, COUNT(*) AS c FROM world_blocks`
+  ).first();
+
+  return json({
+    ok: true, now,
+    // mã thay đổi của khối: thời điểm sửa mới nhất + số lượng
+    rev: (rev ? rev.m : 0) * 100000 + ((rev ? rev.c : 0) % 100000),
+    members: (mem.results || []).map((m) => ({
+      id: m.user_id,
+      x: m.pos_x, z: m.pos_z,
+      seen: m.last_seen,
+      asleep: (now - m.last_seen) > SLEEP_SEC,
     })),
   });
 }
