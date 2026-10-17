@@ -793,13 +793,15 @@ function renderWorld() {
   $('sub').textContent = members.length + ' người · ' + awake + ' đang thức';
   updateNote();
 
-  // khung nhìn: bao cả thế giới
   const W = COLS * PLOT, D = rows * PLOT;
   ROWS = rows;
   fitShadowToWorld(W, D);
-  controls.target.set(W / 2 - 0.5, 1.2, D / 2 - 0.5);
   controls.maxDistance = Math.max(70, W * 1.8);
-  controls.update();
+  /* KHÔNG được đặt lại controls.target ở đây. Hàm này chạy lại MỖI KHI có ai
+     xây/xoá khối (số hiệu khối đổi → tải lại thế giới). Đặt điểm ngắm về giữa
+     thế giới trong khi camera đứng yên làm khoảng cách camera→điểm ngắm vọt
+     lên, rồi vòng lặp bám kéo lại từ từ — đúng cảm giác "đang xây thì bị zoom
+     out giật". Điểm ngắm do vòng lặp bám nhân vật quản lý. */
 
   if (ghost) { ghost.visible = false; ghostCell = null; }
 }
