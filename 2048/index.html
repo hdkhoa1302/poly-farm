@@ -75,6 +75,15 @@
   .overlay h2 { font-size: 34px; color: #776e65; }
   .overlay .btns { display: flex; gap: 10px; }
   .hint { text-align: center; font-size: 12px; color: #a89b8c; margin-top: 14px; max-width: 460px; }
+
+  /* leaderboard modal */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+  .modal.show { display: flex; }
+  .modal-card { background: #faf8ef; border-radius: 14px; width: 100%; max-width: 440px; max-height: 82vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; font-weight: 700; font-size: 16px; border-bottom: 1px solid rgba(0,0,0,.08); }
+  .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #8f8578; line-height: 1; padding: 4px 8px; }
+  .modal-card > div:last-child { padding: 12px; overflow-y: auto; }
+  .player-line { text-align: center; font-size: 12px; color: #a89b8c; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -87,6 +96,7 @@
   </div>
   <div class="bar">
     <p>Ghép các ô để đạt <b>2048</b>!</p>
+    <button class="btn" id="leaderboard">🏆 BXH</button>
     <button class="btn" id="newgame">↻ Ván mới</button>
   </div>
   <div class="board-wrap">
@@ -101,8 +111,17 @@
     </div>
   </div>
   <p class="hint">Vuốt hoặc dùng phím mũi tên / WASD để di chuyển</p>
+  <p class="player-line" id="player-line"></p>
+
+  <div class="modal" id="lb-modal">
+    <div class="modal-card">
+      <div class="modal-head"><span>🏆 Bảng xếp hạng</span><button class="modal-close" id="lb-close">✕</button></div>
+      <div id="lb-body"></div>
+    </div>
+  </div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="../shared/games-hub.js"></script>
 <script>
 // ===== Telegram Web App =====
 const tg = window.Telegram?.WebApp;
@@ -357,6 +376,7 @@ function checkState() {
     overTitle.textContent = 'Bạn thắng! 🎉';
     keepGoingBtn.style.display = 'inline-block';
     overlay.classList.add('show');
+    submitScore();
     return;
   }
   if (!movesAvailable()) {
@@ -364,6 +384,7 @@ function checkState() {
     overTitle.textContent = 'Hết nước rồi! 😅';
     keepGoingBtn.style.display = 'none';
     overlay.classList.add('show');
+    submitScore();
   }
 }
 
@@ -410,6 +431,30 @@ keepGoingBtn.addEventListener('click', () => { keepPlaying = true; overlay.class
 window.addEventListener('resize', () => {
   measure();
   tiles.forEach(t => { const el = tileEls.get(t.id); if (el) setPos(el, t.x, t.y, false); });
+});
+
+// ===== Leaderboard (Games Hub) =====
+const lb = window.GamesHub ? GamesHub.leaderboard('2048') : null;
+const me = window.GamesHub ? GamesHub.player() : null;
+const playerLine = document.getElementById('player-line');
+if (me) playerLine.textContent = '👤 ' + me.name;
+
+function submitScore() {
+  if (!lb || score <= 0) return;
+  lb.submit(score).then(r => {
+    if (r && r.isRecord) playerLine.textContent = '🏆 Điểm cao mới: ' + r.best.toLocaleString('vi-VN') + ' — xem BXH!';
+  });
+}
+
+document.getElementById('leaderboard').addEventListener('click', () => {
+  document.getElementById('lb-modal').classList.add('show');
+  if (window.GamesHub) GamesHub.renderLeaderboard(document.getElementById('lb-body'), '2048', { limit: 20 });
+});
+document.getElementById('lb-close').addEventListener('click', () => {
+  document.getElementById('lb-modal').classList.remove('show');
+});
+document.getElementById('lb-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'lb-modal') e.target.classList.remove('show');
 });
 
 // ===== Start =====

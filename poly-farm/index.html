@@ -60,7 +60,15 @@
 </div>
 <div id="hint">Click vào ô đất để thao tác • Chuột phải để xoay camera</div>
 <div id="msg"></div>
+<button id="btn-lb" style="position:fixed;top:12px;right:12px;z-index:10;background:rgba(20,30,20,0.75);color:#ffd54f;border:2px solid #ffca28;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;backdrop-filter:blur(6px);">🏆 BXH</button>
+<div id="lb-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;">
+  <div style="background:#faf8ef;color:#776e65;border-radius:14px;width:100%;max-width:440px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;font-weight:700;font-size:16px;border-bottom:1px solid rgba(0,0,0,.08);"><span>🏆 Bảng xếp hạng (tiền)</span><button id="lb-close" style="background:none;border:none;font-size:20px;cursor:pointer;color:#8f8578;line-height:1;padding:4px 8px;">✕</button></div>
+    <div id="lb-body" style="padding:12px;overflow-y:auto;"></div>
+  </div>
+</div>
 
+<script src="../shared/games-hub.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -445,6 +453,31 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
+// ===== Leaderboard (Games Hub) =====
+const lb = window.GamesHub ? GamesHub.leaderboard('poly-farm') : null;
+const me = window.GamesHub ? GamesHub.player() : null;
+if (me) {
+  const hint = document.getElementById('hint');
+  if (hint) hint.textContent = '👤 ' + me.name + ' • Click ô đất để thao tác';
+}
+let lastSubmitted = 0;
+setInterval(() => {
+  if (lb && state.money > lastSubmitted && state.money > 0) {
+    lastSubmitted = state.money;
+    lb.submit(state.money);
+  }
+}, 5000);
+document.getElementById('btn-lb').addEventListener('click', () => {
+  document.getElementById('lb-modal').style.display = 'flex';
+  if (window.GamesHub) GamesHub.renderLeaderboard(document.getElementById('lb-body'), 'poly-farm', { limit: 20 });
+});
+document.getElementById('lb-close').addEventListener('click', () => {
+  document.getElementById('lb-modal').style.display = 'none';
+});
+document.getElementById('lb-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'lb-modal') e.target.style.display = 'none';
+});
+
 animate();
 updateUI();
 </script>
