@@ -301,7 +301,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const API = 'https://games-hub-api.hdkhoa1302.workers.dev';
 
 /* phải khớp worker/src/index.js */
-const PLOT = 8, COLS = 6, MAX_Y = 12, MAX_BLOCKS = 600, SLEEP_SEC = 120;
+const PLOT = 8, COLS = 6, MAX_Y = 12, MAX_BLOCKS = 1000, SLEEP_SEC = 120;
 
 const BLOCKS = [
   { id:'grass', name:'Cỏ',   top:0x6cc24a, side:0x8a6a44 },
@@ -312,6 +312,8 @@ const BLOCKS = [
   { id:'sand',  name:'Cát',  top:0xe6d59a, side:0xc9b87e },
   { id:'leaf',  name:'Lá',   top:0x4fae5a, side:0x3d8a47 },
   { id:'glass', name:'Kính', top:0xa8dcf0, side:0x86c2d8, alpha:0.72 },
+  { id:'plaster', name:'Trắng', top:0xede9e1, side:0xd8d4cc },
+  { id:'iron',    name:'Sắt',   top:0x6a6660, side:0x4a4741 },
 ];
 
 const tg = window.Telegram?.WebApp;

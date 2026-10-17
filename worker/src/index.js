@@ -53,9 +53,9 @@ const MIN_MANUAL_MSGS = 3;       // dưới mức này coi như chưa có gì đ
 const PLOT = 8;                  // lô đất mỗi cạnh bao nhiêu ô
 const PLOT_COLS = 6;             // mấy lô trên một hàng
 const MAX_Y = 12;                // xây cao tối đa
-const MAX_BLOCKS = 600;          // trần số khối mỗi người
+const MAX_BLOCKS = 1000;          // trần số khối mỗi người
 const SLEEP_SEC = 120;           // quá 2 phút không thấy nhịp sống = đang ngủ
-const BLOCK_TYPES = ['grass', 'dirt', 'stone', 'wood', 'brick', 'sand', 'leaf', 'glass'];
+const BLOCK_TYPES = ['grass', 'dirt', 'stone', 'wood', 'brick', 'sand', 'leaf', 'glass', 'plaster', 'iron'];
 
 export default {
   async fetch(request, env) {
@@ -524,7 +524,7 @@ async function worldState(env) {
        FROM world_members ORDER BY plot`
   ).all();
   const blk = await env.DB.prepare(
-    `SELECT user_id,x,y,z,t,obj FROM world_blocks ORDER BY user_id, y, z, x LIMIT 8000`
+    `SELECT user_id,x,y,z,t,obj FROM world_blocks ORDER BY user_id, y, z, x LIMIT 16000`
   ).all();
 
   const byUser = {};
@@ -757,7 +757,7 @@ async function worldBlocks(request, env) {
 
   const list = Array.isArray(b.blocks) ? b.blocks : [];
   if (!list.length) return json({ error: 'empty' }, 400);
-  if (list.length > 400) return json({ error: 'too-many', limit: 400 }, 400);
+  if (list.length > MAX_BLOCKS) return json({ error: 'too-many', limit: MAX_BLOCKS }, 400);
 
   const bd = await worldBounds(env);
   const cells = [];
