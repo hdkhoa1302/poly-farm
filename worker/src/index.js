@@ -29,6 +29,7 @@
  *   POST /world/block            (body initData + x,y,z + t|null) -> xây/xoá 1 khối
  *   POST /world/blocks           (body initData + blocks[] + obj?) -> xây 1 VẬT THỂ
  *   POST /world/move             (body initData + take[] + put[])  -> DI DỜI vật thể
+ *   POST /world/look             (body initData + look)           -> lưu ngoại hình
  *   GET  /world/chat             (initData, since?)  -> tin nhắn trong game
  *   POST /world/chat             (body initData + text) -> gửi tin
  *   GET  /world/live             -> BẢN NHẸ: vị trí mọi người + số hiệu khối,
@@ -119,6 +120,7 @@ async function route(request, url, env) {
   if (p === '/world/block' && request.method === 'POST') return worldBlock(request, env);
   if (p === '/world/blocks' && request.method === 'POST') return worldBlocks(request, env);
   if (p === '/world/move' && request.method === 'POST') return worldMove(request, env);
+  if (p === '/world/look' && request.method === 'POST') return worldLook(request, env);
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -518,7 +520,7 @@ function plotOrigin(plot) {
 async function worldState(env) {
   const now = Math.floor(Date.now() / 1000);
   const mem = await env.DB.prepare(
-    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits,pos_x,pos_z
+    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits,pos_x,pos_z,look
        FROM world_members ORDER BY plot`
   ).all();
   const blk = await env.DB.prepare(
@@ -536,6 +538,7 @@ async function worldState(env) {
     members: (mem.results || []).map((m) => ({
       id: m.user_id, name: m.name, username: m.username, photo: m.photo,
       hue: m.hue, plot: m.plot,
+      look: m.look || '',                            // "áo,quần,da,tóc,kiểu tóc,mũ"
       firstSeen: m.first_seen, lastSeen: m.last_seen, visits: m.visits,
       posX: m.pos_x == null ? null : m.pos_x, posZ: m.pos_z == null ? null : m.pos_z,
       asleep: (now - m.last_seen) > SLEEP_SEC,
@@ -711,6 +714,30 @@ async function worldChatSend(request, env) {
       text, at: now,
     },
   });
+}
+
+/**
+ * Lưu ngoại hình nhân vật: "màu áo, màu quần, tông da, màu tóc, kiểu tóc, mũ".
+ * Chuỗi rỗng = chưa chọn → app sẽ mở màn tạo nhân vật.
+ */
+async function worldLook(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+  const uid = v.user.id;
+
+  const nm = await env.DB.prepare('SELECT user_id FROM world_members WHERE user_id = ?').bind(uid).first();
+  if (!nm) return json({ error: 'not-joined' }, 403);
+
+  const parts = String(b.look || '').split(',').map(Number);
+  if (parts.length !== 6 || parts.some((x) => !Number.isFinite(x) || x < 0)) {
+    return json({ error: 'bad-look' }, 400);
+  }
+  const look = parts.map((x) => Math.min(999, Math.floor(x))).join(',');
+  await env.DB.prepare('UPDATE world_members SET look = ? WHERE user_id = ?').bind(look, uid).run();
+  return json({ ok: true, look });
 }
 
 /**

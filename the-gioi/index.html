@@ -137,6 +137,22 @@
     display:flex;align-items:center;justify-content:center;gap:8px}
   .goWide:disabled{opacity:.45}
 
+  /* màn tạo nhân vật */
+  .maker{max-height:76vh}
+  .mkBody{padding:10px 14px 14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+  .mkStage{height:158px;flex:none;border-radius:14px;border:1px solid var(--line);overflow:hidden;
+    background:radial-gradient(120% 100% at 50% 0,rgba(90,130,190,.3),rgba(10,15,24,.65))}
+  .mkStage canvas{width:100%;height:100%;display:block}
+  .mkRow{display:flex;flex-direction:column;gap:6px}
+  .mkRow .lab{font-size:11.5px;color:var(--muted)}
+  .mkOpts{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+  .optSw{width:30px;height:30px;border-radius:9px;border:2px solid rgba(255,255,255,.16);
+    padding:0;cursor:pointer;transition:transform .12s var(--ease),border-color .12s var(--ease)}
+  .optSw.on{border-color:#fff;transform:translateY(-2px)}
+  .optchip{padding:6px 11px;border-radius:999px;border:1px solid var(--line);
+    background:rgba(30,42,64,.55);color:var(--muted);font:inherit;font-size:12px}
+  .optchip.on{color:var(--ink);border-color:#7fb2ff;background:rgba(58,120,220,.3)}
+
   /* hướng dẫn lần đầu */
   .guide{position:fixed;inset:0;display:grid;place-items:center;background:rgba(8,12,20,.85);z-index:22;padding:22px}
   .guide .box{max-width:330px;width:100%}
@@ -178,6 +194,7 @@
 <div class="tools">
   <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
   <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
+  <button class="iconbtn" id="makeBtn" title="Đổi nhân vật"><span id="makeIcon"></span></button>
   <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
   <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
 </div>
@@ -207,6 +224,18 @@
   <div class="chatForm">
     <input class="chatIn" id="chatIn" type="text" maxlength="200" placeholder="Nhắn gì đó…" autocomplete="off" enterkeyhint="send">
     <button class="chatSend" id="chatSend"><span id="chatSendIcon"></span></button>
+  </div>
+</div>
+
+<div class="chat maker" id="makePanel">
+  <div class="head">
+    <b id="makeTitle">Tạo nhân vật của bạn</b>
+    <button class="iconbtn" id="makeClose"><span id="makeCloseIcon"></span></button>
+  </div>
+  <div class="mkBody">
+    <div class="mkStage"><canvas id="pv"></canvas></div>
+    <div class="mkRows" id="mkRows"></div>
+    <button class="goWide" id="makeDone"><span id="makeDoneIcon"></span><span id="makeDoneText">Xong</span></button>
   </div>
 </div>
 
@@ -313,6 +342,8 @@ const ICONS = {
   'send':'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   'chevron':'<path d="m6 9 6 6 6-6"/>',
   'sparkles':'<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+  'user':'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  'check':'<path d="M20 6 9 17l-5-5"/>',
   'hand':'<path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8v-1a2 2 0 1 1 4 0"/>',
   'move':'<path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3"/><path d="m9 19 3 3 3-3"/><path d="m5 9-3 3 3 3"/><path d="m19 9 3 3-3 3"/>',
   'rotate':'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
@@ -337,6 +368,9 @@ $('g6').innerHTML = svg('sparkles', 16);
 $('g7').innerHTML = svg('hand', 16);
 $('toolChev').innerHTML = svg('chevron', 14);
 $('buildIcon').innerHTML = svg('sparkles', 18);
+$('makeIcon').innerHTML = svg('user', 18);
+$('makeCloseIcon').innerHTML = svg('close', 16);
+$('makeDoneIcon').innerHTML = svg('check', 16);
 $('buildCloseIcon').innerHTML = svg('close', 16);
 $('buildGoIcon').innerHTML = svg('sparkles', 16);
 
@@ -471,10 +505,51 @@ const hsl = (h, s, l) => new THREE.Color().setHSL((h % 360) / 360, s / 100, l / 
 const M_SKIN = new THREE.MeshLambertMaterial({ color: 0xf0c69a });
 const M_HAIR = new THREE.MeshLambertMaterial({ color: 0x2e2a26 });
 
-function buildPerson(hue, asleep) {
+/* ---------------------------------------------------------------- ngoại hình nhân vật
+ * Ngoại hình lưu thành 6 số: "màu áo, màu quần, tông da, màu tóc, kiểu tóc, mũ".
+ * Chuỗi rỗng = chưa chọn → app mở màn tạo nhân vật.
+ */
+const SHIRT_HUES = [0, 20, 40, 60, 120, 170, 200, 240, 285, 320];
+const HAIR_HUES = [15, 30, 45, 0, 200, 260, 320, 90];
+const SKINS = [
+  { ten: 'Sáng', h: 30, s: 55, l: 84 },
+  { ten: 'Hồng', h: 22, s: 52, l: 76 },
+  { ten: 'Vừa', h: 28, s: 46, l: 66 },
+  { ten: 'Rám', h: 26, s: 42, l: 52 },
+  { ten: 'Nâu', h: 24, s: 40, l: 38 },
+  { ten: 'Sẫm', h: 22, s: 34, l: 25 },
+];
+const HAIR_STYLES = [
+  { id: 0, ten: 'Trọc' }, { id: 1, ten: 'Ngắn' }, { id: 2, ten: 'Dài' },
+  { id: 3, ten: 'Dựng' }, { id: 4, ten: 'Búi' },
+];
+const HATS = [
+  { id: 0, ten: 'Không' }, { id: 1, ten: 'Mũ lưỡi trai' },
+  { id: 2, ten: 'Vương miện' }, { id: 3, ten: 'Mũ rộng vành' },
+];
+const LOOK_DEF = { sh: 210, pa: 240, sk: 2, ha: 15, st: 1, hat: 0 };
+const inRange = (v, hi) => Math.max(0, Math.min(hi, Math.floor(Number(v) || 0)));
+
+function lookOf(m) {
+  if (!m || !m.look) return { ...LOOK_DEF };
+  const p = String(m.look).split(',').map(Number);
+  if (p.length !== 6 || p.some((x) => !Number.isFinite(x))) return { ...LOOK_DEF };
+  return { sh: inRange(p[0], 359), pa: inRange(p[1], 359), sk: inRange(p[2], SKINS.length - 1),
+           ha: inRange(p[3], 359), st: inRange(p[4], HAIR_STYLES.length - 1), hat: inRange(p[5], HATS.length - 1) };
+}
+const lookStr = (L) => [L.sh, L.pa, L.sk, L.ha, L.st, L.hat].join(',');
+
+function buildPerson(look, asleep) {
+  const L = look || { ...LOOK_DEF };
+  const skin = SKINS[inRange(L.sk, SKINS.length - 1)];
   const g = new THREE.Group();
-  const shirt = new THREE.MeshLambertMaterial({ color: hsl(hue, 58, 52) });
-  const pants = new THREE.MeshLambertMaterial({ color: hsl(hue, 34, 32) });
+  const shirt = new THREE.MeshLambertMaterial({ color: hsl(L.sh, 58, 52) });
+  const pants = new THREE.MeshLambertMaterial({ color: hsl(L.pa, 34, 32) });
+  const skinM = new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(skin.h / 360, skin.s / 100, skin.l / 100) });
+  const hairM = new THREE.MeshLambertMaterial({ color: hsl(L.ha, 40, 26) });
+  const capM = new THREE.MeshLambertMaterial({ color: 0x2f6fd0 });
+  const crownM = new THREE.MeshLambertMaterial({ color: 0xf0c419 });
+  const brimM = new THREE.MeshLambertMaterial({ color: 0xd9b98a });
   const add = (w, h, d, x, y, z, mat) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
@@ -500,8 +575,27 @@ function buildPerson(hue, asleep) {
   add(0.52, 0.6, 0.3, 0, 0.8, 0, shirt);
   const armL = limb(0.16, 0.5, 0.16, -0.34, 1.05, 0, shirt);
   const armR = limb(0.16, 0.5, 0.16,  0.34, 1.05, 0, shirt);
-  add(0.44, 0.42, 0.42, 0, 1.31, 0, M_SKIN);
-  add(0.46, 0.14, 0.44, 0, 1.52, 0, M_HAIR);      // tóc
+  add(0.44, 0.42, 0.42, 0, 1.31, 0, skinM);
+  // tóc theo kiểu
+  if (L.st > 0) add(0.46, 0.14, 0.44, 0, 1.52, 0, hairM);
+  if (L.st === 2) {                                  // dài: phủ sau gáy + hai bên
+    add(0.46, 0.36, 0.12, 0, 1.34, -0.18, hairM);
+    add(0.08, 0.28, 0.42, -0.24, 1.38, 0, hairM);
+    add(0.08, 0.28, 0.42, 0.24, 1.38, 0, hairM);
+  }
+  if (L.st === 3) {                                  // dựng: ba chỏm nhọn
+    add(0.1, 0.18, 0.1, -0.12, 1.66, 0, hairM);
+    add(0.1, 0.24, 0.1, 0, 1.69, 0, hairM);
+    add(0.1, 0.18, 0.1, 0.12, 1.66, 0, hairM);
+  }
+  if (L.st === 4) add(0.22, 0.22, 0.22, 0, 1.68, -0.08, hairM);   // búi
+  // mũ
+  if (L.hat === 1) { add(0.5, 0.16, 0.5, 0, 1.62, 0, capM); add(0.5, 0.05, 0.24, 0, 1.57, 0.32, capM); }
+  if (L.hat === 2) {
+    add(0.48, 0.12, 0.48, 0, 1.63, 0, crownM);
+    for (const px of [-0.16, 0, 0.16]) add(0.09, 0.18, 0.09, px, 1.75, 0, crownM);
+  }
+  if (L.hat === 3) { add(0.76, 0.06, 0.76, 0, 1.58, 0, brimM); add(0.42, 0.2, 0.42, 0, 1.7, 0, brimM); }
   const eye = new THREE.MeshBasicMaterial({ color: 0x241f1c });
   add(0.07, 0.07, 0.02, -0.1, 1.32, 0.22, eye);
   add(0.07, 0.07, 0.02,  0.1, 1.32, 0.22, eye);
@@ -676,7 +770,7 @@ function renderWorld() {
     else { px = ox + Math.floor(PLOT / 2) + 0.5; pz = oz + Math.floor(PLOT / 2) + 0.5; }
     const top = topAt(Math.floor(px), Math.floor(pz));
 
-    const p = buildPerson(m.hue == null ? 210 : m.hue, asleep);
+    const p = buildPerson(lookOf(m), asleep);
     p.position.set(px, asleep ? 0.28 : top, pz);
     p.rotation.y = ((m.plot % 4) * Math.PI) / 2 + Math.PI * 0.15;
     peopleGroup.add(p);
@@ -1240,15 +1334,21 @@ async function boot() {
     controls.target.set(ox + PLOT / 2, 1.2, oz + PLOT / 2);
     controls.update();
   }
-  // hướng dẫn lần đầu
+  // Lần đầu vào game: tạo nhân vật TRƯỚC, tạo xong mới tới hướng dẫn.
+  const mineMember = ((WORLD && WORLD.members) || []).find((x) => x.id === (u && u.id));
+  myLook = (mineMember && mineMember.look) || '';
+  curLook = myLook ? lookOf(mineMember) : { ...LOOK_DEF };
+  firstLook = !myLook;
+
   let seenGuide = false;
   try { seenGuide = !!localStorage.getItem('tg_world_guide_v2'); } catch (e) {}
-  if (!seenGuide) $('guide').hidden = false;
+  $('guide').hidden = firstLook ? true : !!seenGuide ? true : false;
   $('guideOk').onclick = () => {
     try { localStorage.setItem('tg_world_guide_v2', '1'); } catch (e) {}
     $('guide').hidden = true;
     haptic('light');
   };
+  if (firstLook) setTimeout(() => openMaker(true), 500);
 
   requestAnimationFrame(tick);
 }
@@ -1486,6 +1586,158 @@ function buildFromSpec(spec) {
   }
   return { cells, o, cut: cells.length > MAX_OBJ };
 }
+
+/* ---------------------------------------------------------------- màn tạo nhân vật
+ * Khung xem trước có ba.js riêng (cảnh bé, chỉ chạy khi bảng đang mở) để không
+ * phải đụng vào cảnh thế giới đang chạy.
+ */
+let curLook = { ...LOOK_DEF };
+let myLook = '';
+let mkOpen = false;
+let firstLook = false;
+let pvReady = false, pvScene = null, pvCam = null, pvRenderer = null, pvPerson = null, pvT = 0;
+
+function pvInit() {
+  if (pvReady) return;
+  pvRenderer = new THREE.WebGLRenderer({ canvas: $('pv'), antialias: true, alpha: true });
+  pvRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  pvScene = new THREE.Scene();
+  pvCam = new THREE.PerspectiveCamera(36, 1, 0.1, 40);
+  pvCam.position.set(0, 1.3, 4.5);
+  pvCam.lookAt(0, 0.95, 0);
+  pvScene.add(new THREE.HemisphereLight(0xffffff, 0x46566e, 1.15));
+  const dl = new THREE.DirectionalLight(0xffffff, 1.25);
+  dl.position.set(3, 6, 4);
+  pvScene.add(dl);
+  pvReady = true;
+}
+
+function pvDraw() {
+  if (!pvReady) return;
+  const cv = $('pv');
+  const w = Math.max(80, cv.clientWidth), h = Math.max(60, cv.clientHeight);
+  pvRenderer.setSize(w, h, false);
+  pvCam.aspect = w / h;
+  pvCam.updateProjectionMatrix();
+  if (pvPerson) pvScene.remove(pvPerson);
+  pvPerson = buildPerson(curLook, false);
+  pvScene.add(pvPerson);
+  pvRenderer.render(pvScene, pvCam);
+}
+
+/** Xoay nhẹ qua lại cho dễ nhìn mọi mặt; chỉ chạy khi bảng đang mở. */
+function pvLoop() {
+  if (!mkOpen) return;
+  requestAnimationFrame(pvLoop);
+  pvT += 1;
+  if (pvPerson) pvPerson.rotation.y = Math.sin(pvT / 90) * 0.7;
+  pvRenderer.render(pvScene, pvCam);
+}
+
+/* các hàng lựa chọn */
+function mkAddRow(label, build) {
+  const row = document.createElement('div');
+  row.className = 'mkRow';
+  const lab = document.createElement('div');
+  lab.className = 'lab';
+  lab.textContent = label;
+  const opts = document.createElement('div');
+  opts.className = 'mkOpts';
+  row.appendChild(lab);
+  row.appendChild(opts);
+  $('mkRows').appendChild(row);
+  build(opts);
+}
+function mkSwatch(box, color, isOn, pick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'optSw' + (isOn() ? ' on' : '');
+  b.style.background = color;
+  b.onclick = () => { pick(); mkRows(); pvDraw(); haptic('sel'); };
+  box.appendChild(b);
+}
+function mkChip(box, text, isOn, pick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'optchip' + (isOn() ? ' on' : '');
+  b.textContent = text;
+  b.onclick = () => { pick(); mkRows(); pvDraw(); haptic('sel'); };
+  box.appendChild(b);
+}
+
+function mkRows() {
+  const box = $('mkRows');
+  box.innerHTML = '';
+  mkAddRow('Màu áo', (o) => SHIRT_HUES.forEach((h) =>
+    mkSwatch(o, 'hsl(' + h + ' 58% 52%)', () => curLook.sh === h, () => { curLook.sh = h; })));
+  mkAddRow('Màu quần', (o) => SHIRT_HUES.forEach((h) =>
+    mkSwatch(o, 'hsl(' + h + ' 34% 32%)', () => curLook.pa === h, () => { curLook.pa = h; })));
+  mkAddRow('Màu tóc', (o) => HAIR_HUES.forEach((h) =>
+    mkSwatch(o, 'hsl(' + h + ' 40% 26%)', () => curLook.ha === h, () => { curLook.ha = h; })));
+  mkAddRow('Tông da', (o) => SKINS.forEach((sk, i) =>
+    mkSwatch(o, 'hsl(' + sk.h + ' ' + sk.s + '% ' + sk.l + '%)', () => curLook.sk === i,
+             () => { curLook.sk = i; })));
+  mkAddRow('Kiểu tóc', (o) => HAIR_STYLES.forEach((hs) =>
+    mkChip(o, hs.ten, () => curLook.st === hs.id, () => { curLook.st = hs.id; })));
+  mkAddRow('Mũ', (o) => HATS.forEach((ht) =>
+    mkChip(o, ht.ten, () => curLook.hat === ht.id, () => { curLook.hat = ht.id; })));
+}
+
+function openMaker(open) {
+  if (open) { openChat(false); openBuild(false); setPal(false); }
+  mkOpen = open;
+  $('makePanel').classList.toggle('on', open);
+  if (open) {
+    pvInit();
+    $('makeTitle').textContent = firstLook ? 'Tạo nhân vật của bạn' : 'Đổi nhân vật';
+    $('makeDoneText').textContent = firstLook ? 'Vào thế giới' : 'Lưu';
+    mkRows();
+    setTimeout(() => { pvDraw(); pvLoop(); }, 50);
+  }
+}
+$('makeBtn').onclick = () => { openMaker(!mkOpen); haptic('sel'); };
+$('makeClose').onclick = () => openMaker(false);
+
+async function saveLook() {
+  const btn = $('makeDone');
+  btn.disabled = true;
+  const r = await post('/world/look', { initData: initData(), look: lookStr(curLook) });
+  btn.disabled = false;
+  if (!r.ok || !r.body || !r.body.ok) { toast('Không lưu được ngoại hình — thử lại'); return; }
+  myLook = r.body.look;
+
+  // đổi ngay nhân vật trong thế giới, khỏi phải tải lại
+  const mm = ((WORLD && WORLD.members) || []).find((x) => x.id === (me() && me().id));
+  if (mm) mm.look = myLook;
+  const o = local.get(me() && me().id);
+  if (o) {
+    const np = buildPerson(curLook, o.asleep);
+    np.position.copy(o.group.position);
+    np.rotation.y = o.group.rotation.y;
+    peopleGroup.remove(o.group);
+    peopleGroup.add(np);
+    o.group = np;
+    o.base = np.position.y;
+  }
+  openMaker(false);
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {} }
+  toast(firstLook ? 'Chào ' + (me() && me().first_name ? me().first_name : 'bạn') + '!' : 'Đã lưu ngoại hình');
+
+  if (firstLook) {                                // xong nhân vật thì mới tới hướng dẫn
+    firstLook = false;
+    let seen = false;
+    try { seen = !!localStorage.getItem('tg_world_guide_v2'); } catch (e) {}
+    if (!seen) setTimeout(() => { $('guide').hidden = false; }, 350);
+  }
+}
+$('makeDone').onclick = () => saveLook();
+$('makeClose').onclick = () => {
+  openMaker(false);
+  if (firstLook) {                                 // chưa tạo thì vẫn cho vào, nhưng nhắc
+    toast('Chưa chọn nhân vật — bấm nút hình người để tạo sau');
+    firstLook = false;
+  }
+};
 
 /* ---------------------------------------------------------------- nhấc & đặt lại vật thể
  * Chạm GIỮ một khối của mình: nếu khối đó thuộc một vật thể (có obj) thì nhấc cả
