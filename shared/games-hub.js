@@ -1,13 +1,16 @@
 /* ============================================================
- * Games Hub — Player identity + Shared Leaderboard
+ * Games Hub — Danh tính người chơi + Bảng xếp hạng chung
  * ------------------------------------------------------------
- * Tự động lấy thông tin người chơi từ Telegram và lưu điểm
- * lên Firestore (dùng chung giữa mọi người).
+ * Điểm lưu ở Cloudflare Worker (D1), KHÔNG còn Firestore.
+ * Không có API key nào trong file này.
+ *
+ * Gửi điểm cần `tg.initData` (Telegram ký) → Worker xác minh chữ ký
+ * rồi mới ghi, nên không ai giả được tên người khác.
  *
  * Cách dùng:
  *   <script src="../shared/games-hub.js"></script>
  *   const lb = GamesHub.leaderboard('2048');   // appId
- *   lb.submit(1234);                            // lưu điểm
+ *   await lb.submit(1234);                      // lưu điểm
  *   const rows = await lb.top(20);              // top 20
  *   GamesHub.player()                           // {id,name,photo,...}
  *   GamesHub.renderLeaderboard(el, '2048');     // vẽ UI
@@ -15,18 +18,20 @@
 (function (global) {
   'use strict';
 
-  // ---- Cấu hình Firebase (public web config — an toàn để công khai) ----
-  var FIREBASE = {
-    projectId: 'taichinhcanhan-9fcf2',
-    apiKey: 'AIzaSyATvxstwU8NM81b8osYBDwmtcL9zAQfdhk'
-  };
-  var REST = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE.projectId +
-             '/databases/(default)/documents';
+  var WORKER = 'https://games-hub-api.hdkhoa1302.workers.dev';
 
-  // ================= Player identity =================
+  function tg() { return global.Telegram && global.Telegram.WebApp; }
+
+  /** initData gốc do Telegram ký — chỉ có khi mở trong Mini App */
+  function initData() {
+    var t = tg();
+    return (t && t.platform && t.platform !== 'unknown' && t.initData) || '';
+  }
+
+  // ================= Danh tính người chơi =================
   function player() {
-    var tg = global.Telegram && global.Telegram.WebApp;
-    var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    var t = tg();
+    var u = t && t.initDataUnsafe && t.initDataUnsafe.user;
     if (u) {
       var full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
       return {
@@ -38,7 +43,7 @@
         source: 'telegram'
       };
     }
-    // Khách (mở ngoài Telegram) — id ổn định theo thiết bị
+    // Khách (mở ngoài Telegram) — không có chữ ký nên chỉ chơi cục bộ
     var gid = null;
     try { gid = localStorage.getItem('gh_guest_id'); } catch (e) {}
     if (!gid) {
@@ -48,10 +53,10 @@
     return { id: gid, tgId: null, name: 'Khách', username: '', photo: '', source: 'guest' };
   }
 
-  // ================= Chat / group context =================
+  // ================= Bối cảnh nhóm chat =================
   function chat() {
-    var tg = global.Telegram && global.Telegram.WebApp;
-    var c = tg && tg.initDataUnsafe && tg.initDataUnsafe.chat;
+    var t = tg();
+    var c = t && t.initDataUnsafe && t.initDataUnsafe.chat;
     if (!c) return null;
     return {
       id: 'tgchat_' + c.id,
@@ -61,91 +66,56 @@
     };
   }
 
-  // ================= Firestore value helpers =================
-  function enc(s) { return encodeURIComponent(s); }
-  function strVal(v) { return { stringValue: String(v == null ? '' : v) }; }
-  function intVal(v) { return { integerValue: String(Math.floor(Number(v) || 0)) }; }
-  function readStr(f, k) { return f[k] && f[k].stringValue != null ? f[k].stringValue : ''; }
-  function readInt(f, k) {
-    if (!f[k]) return 0;
-    if (f[k].integerValue != null) return parseInt(f[k].integerValue, 10) || 0;
-    if (f[k].doubleValue != null) return Math.floor(f[k].doubleValue) || 0;
-    return 0;
+  function guestBest(appId) {
+    try { return parseInt(localStorage.getItem('gh_lb_' + appId) || '0', 10) || 0; } catch (e) { return 0; }
+  }
+  function setGuestBest(appId, v) {
+    try { localStorage.setItem('gh_lb_' + appId, String(v)); } catch (e) {}
   }
 
-  // ================= Leaderboard =================
+  // ================= Bảng xếp hạng =================
   function leaderboard(appId) {
-    var base = REST + '/games/' + enc(appId) + '/scores';
 
-    /** Lưu điểm (chỉ ghi đè nếu cao hơn điểm cũ). Trả về điểm tốt nhất. */
+    /** Lưu điểm. Worker giữ điểm CAO NHẤT. Trả {ok,best,isRecord}. */
     async function submit(score) {
       score = Math.floor(Number(score) || 0);
       if (score < 0) score = 0;
-      var p = player();
-      var c = chat();
-      var docId = p.id;
 
-      // đọc điểm cũ để giữ điểm cao nhất
-      var best = score;
+      var id = initData();
+      if (!id) {                       // ngoài Telegram → chỉ lưu máy này
+        var gb = Math.max(guestBest(appId), score);
+        setGuestBest(appId, gb);
+        return { ok: false, best: gb, offline: true };
+      }
       try {
-        var r0 = await fetch(base + '/' + enc(docId) + '?key=' + FIREBASE.apiKey);
-        if (r0.ok) {
-          var d0 = await r0.json();
-          best = Math.max(readInt(d0.fields || {}, 'score'), score);
-        }
-      } catch (e) { /* offline */ }
-
-      var body = {
-        fields: {
-          appId: strVal(appId),
-          playerId: strVal(p.id),
-          name: strVal(p.name),
-          username: strVal(p.username),
-          photo: strVal(p.photo),
-          score: intVal(best),
-          last: intVal(score),
-          chatId: strVal(c ? c.id : ''),
-          chatTitle: strVal(c ? c.title : ''),
-          updatedAt: { timestampValue: new Date().toISOString() }
-        }
-      };
-      try {
-        var res = await fetch(base + '/' + enc(docId) + '?key=' + FIREBASE.apiKey, {
-          method: 'PATCH',
+        var res = await fetch(WORKER + '/lb/' + encodeURIComponent(appId), {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify({ initData: id, score: score })
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        return { ok: true, best: best, isRecord: score > 0 && best === score };
+        return await res.json();
       } catch (e) {
-        // fallback local
-        try {
-          var lk = 'gh_lb_' + appId;
-          var cur = parseInt(localStorage.getItem(lk) || '0', 10);
-          if (best > cur) localStorage.setItem(lk, String(best));
-        } catch (e2) {}
-        return { ok: false, best: best, error: String(e) };
+        var b = Math.max(guestBest(appId), score);
+        setGuestBest(appId, b);
+        return { ok: false, best: b, offline: true, error: String(e) };
       }
     }
 
-    /** Lấy top N người chơi. */
+    /** Top N người chơi (công khai, không cần chữ ký). */
     async function top(n) {
-      n = Math.min(Math.max(parseInt(n || 20, 10), 1), 100);
+      var lim = Math.min(Math.max(parseInt(n || 20, 10), 1), 50);
       try {
-        var url = base + '?key=' + FIREBASE.apiKey + '&pageSize=' + n + '&orderBy=score%20desc';
-        var res = await fetch(url);
+        var res = await fetch(WORKER + '/lb/' + encodeURIComponent(appId));
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var d = await res.json();
-        if (!d.documents) return [];
-        return d.documents.map(function (doc) {
-          var f = doc.fields || {};
+        return (d.scores || []).slice(0, lim).map(function (r) {
           return {
-            playerId: readStr(f, 'playerId'),
-            name: readStr(f, 'name') || 'Người chơi',
-            username: readStr(f, 'username'),
-            photo: readStr(f, 'photo'),
-            score: readInt(f, 'score'),
-            chatTitle: readStr(f, 'chatTitle')
+            playerId: r.pid || '',
+            name: r.name || 'Người chơi',
+            username: r.username || '',
+            photo: r.photo || '',
+            score: r.score || 0
           };
         });
       } catch (e) {
@@ -153,34 +123,40 @@
       }
     }
 
-    /** Vị trí của người chơi hiện tại (dựa trên điểm tốt nhất của họ). */
+    /** Vị trí của người chơi hiện tại. */
     async function myRank() {
       var p = player();
-      var rows = await top(100);
-      var me = rows.findIndex(function (r) { return r.playerId === p.id; });
-      return { rank: me >= 0 ? me + 1 : null, total: rows.length, player: p };
+      var rows = await top(50);
+      var i = rows.findIndex(function (r) { return r.playerId === p.id; });
+      return { rank: i >= 0 ? i + 1 : null, total: rows.length, player: p };
     }
 
     return { submit: submit, top: top, myRank: myRank, appId: appId };
   }
 
-  // ================= UI: bảng xếp hạng =================
+  // ================= UI =================
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
   function renderLeaderboard(el, appId, opts) {
     opts = opts || {};
     var lb = leaderboard(appId);
-    el.innerHTML = '<div style="text-align:center;padding:16px;opacity:.7">Đang tải bảng xếp hạng…</div>';
+    el.innerHTML = '<div class="gh-msg">Đang tải bảng xếp hạng…</div>';
     lb.top(opts.limit || 20).then(function (rows) {
       var p = player();
       if (!rows.length) {
-        el.innerHTML = '<div style="text-align:center;padding:16px;opacity:.7">Chưa có ai chơi. Bạn là người đầu tiên! 🏆</div>';
+        el.innerHTML = '<div class="gh-msg">Chưa có ai chơi. Bạn là người đầu tiên!</div>';
         return;
       }
-      var medals = ['🥇', '🥈', '🥉'];
+      var medals = ['1', '2', '3'];
       var html = rows.map(function (r, i) {
         var isMe = r.playerId === p.id;
         var av = r.photo
-          ? '<img src="' + r.photo + '" class="gh-av" alt="">'
-          : '<div class="gh-av gh-av-ph">' + (r.name[0] || '?').toUpperCase() + '</div>';
+          ? '<img src="' + escapeHtml(r.photo) + '" class="gh-av" alt="">'
+          : '<div class="gh-av gh-av-ph">' + escapeHtml((r.name[0] || '?').toUpperCase()) + '</div>';
         return '<div class="gh-row' + (isMe ? ' gh-me' : '') + '">' +
           '<div class="gh-rank">' + (medals[i] || ('#' + (i + 1))) + '</div>' +
           av +
@@ -195,18 +171,12 @@
     });
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
-  /** CSS mặc định cho bảng xếp hạng (chèn 1 lần). */
   function injectStyles() {
     if (document.getElementById('gh-styles')) return;
     var s = document.createElement('style');
     s.id = 'gh-styles';
     s.textContent = [
+      '.gh-msg{text-align:center;padding:16px;opacity:.65;font-size:14px}',
       '.gh-list{display:flex;flex-direction:column;gap:6px}',
       '.gh-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(128,128,128,.12)}',
       '.gh-row.gh-me{background:rgba(0,136,204,.18);outline:1px solid rgba(0,136,204,.5)}',
@@ -222,17 +192,16 @@
   }
 
   // ================= Export =================
-  var GamesHub = {
+  global.GamesHub = {
     player: player,
     chat: chat,
+    initData: initData,
     leaderboard: leaderboard,
     renderLeaderboard: function (el, appId, opts) {
       injectStyles();
       renderLeaderboard(el, appId, opts);
     },
-    config: FIREBASE,
-    version: '1.0.0'
+    WORKER: WORKER,
+    version: '2.0.0'
   };
-
-  global.GamesHub = GamesHub;
 })(window);

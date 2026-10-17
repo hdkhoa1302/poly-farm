@@ -202,7 +202,7 @@ function publicUser(u) {
 /* ---------------------------------------------------------- leaderboard */
 async function topScores(env, appId) {
   const { results } = await env.DB.prepare(
-    `SELECT name,username,photo,score FROM scores
+    `SELECT player_id AS pid,name,username,photo,score FROM scores
       WHERE app_id = ? ORDER BY score DESC LIMIT 50`
   ).bind(appId).all();
   return json({ ok: true, scores: results || [] });

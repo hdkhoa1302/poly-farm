@@ -10,7 +10,7 @@ GROUP_ID = "-1001769279835"
 [[d1_databases]]
 binding = "DB"
 database_name = "games-hub"
-database_id = "PLACEHOLDER"
+database_id = "15afe1f8-3574-40be-898f-2dea2f8b0360"
 
 [observability]
 enabled = true

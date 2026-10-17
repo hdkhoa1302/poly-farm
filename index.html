@@ -408,78 +408,29 @@ if (!APPS.length) {
   if (window.Icons) Icons.hydrate(list);   // vẽ icon SVG
 }
 
-/* ---------------- vé vào app (chỉ thành viên nhóm) ----------------
- * Điều hướng trong webview làm MẤT context Telegram ở trang con, nên trang con
- * không tự biết ai đang mở. Hub thì còn nguyên initData (Telegram ký, không giả
- * được) → hub phát "vé" vào Firestore, trang con đọc vé mới cho xem.
+/* ---------------- mở app ---------------- */
+/* Khi nhảy sang trang con trong cùng webview, URL mất phần hash launch params
+ * nên `tg.initData` rỗng ở trang con. Cách chuẩn: gắn lại launch params vào hash
+ * đúng như Telegram vẫn làm — telegram-web-app.js ở trang con sẽ tự dựng lại
+ * initData từ đó. Trang con (Sổ Tay Nhóm) nhờ thế tự xác minh được với Worker,
+ * không cần "vé" trung gian, không cần Firestore, không cần API key.
  */
-const FS_REST = 'https://firestore.googleapis.com/v1/projects/taichinhcanhan-9fcf2/databases/(default)/documents';
-const FS_KEY = 'AIzaSyATvxstwU8NM81b8osYBDwmtcL9zAQfdhk';
-const GROUP_ID = '-1001769279835';
-const NEEDS_TICKET = { 'so-tay-nhom': 1 };
-
-function newToken() {
-  const a = new Uint8Array(16); crypto.getRandomValues(a);
-  return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function me() {
-  try { return (inTg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null; } catch (e) { return null; }
-}
-function myChat() {
-  try { return (inTg && tg.initDataUnsafe && tg.initDataUnsafe.chat) || null; } catch (e) { return null; }
-}
-
-/* Thành viên nhóm: Telegram nói chat hiện tại đúng là nhóm → khỏi cần duyệt tay. */
-function fromGroup() {
-  const c = myChat();
-  return !!c && String(c.id) === GROUP_ID;
-}
-
-/* Danh sách đã được duyệt: games/group-digest-members/scores/tg_<user_id> */
-async function approved(uid) {
-  if (!uid) return false;
-  try {
-    const r = await fetch(FS_REST + '/games/group-digest-members/scores/tg_' + encodeURIComponent(uid) + '?key=' + FS_KEY);
-    if (!r.ok) return false;
-    return !!(await r.json()).fields;
-  } catch (e) { return false; }
-}
-
-async function mintTicket() {
-  const u = me(), c = myChat();
-  const uid = u ? String(u.id) : '';
-  const allow = fromGroup() || (await approved(uid));
-  const token = newToken();
-  const now = Math.floor(Date.now() / 1000);
-  const fields = {
-    appId:    { stringValue: 'group-digest-tickets' },
-    playerId: { stringValue: token },
-    name:     { stringValue: 'ticket' },
-    score:    { integerValue: String(now + 900) },      // hết hạn sau 15 phút
-    userId:   { stringValue: uid },
-    userName: { stringValue: u ? ([u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || '') : '' },
-    chatId:   { stringValue: c ? String(c.id) : '' },
-    allow:    { booleanValue: allow },
-    ts:       { timestampValue: new Date().toISOString() }
-  };
-  await fetch(FS_REST + '/games/group-digest-tickets/scores/' + token + '?key=' + FS_KEY,
-    { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
-  return token;
+function launchHash() {
+  if (!inTg || !tg.initData) return '';
+  const p = new URLSearchParams();
+  p.set('tgWebAppData', tg.initData);
+  p.set('tgWebAppVersion', tg.version || '7.0');
+  p.set('tgWebAppPlatform', tg.platform || 'web');
+  try { if (tg.themeParams) p.set('tgWebAppThemeParams', JSON.stringify(tg.themeParams)); } catch (e) {}
+  return p.toString();
 }
 
 async function openApp(app) {
   if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
   if (app.path) {
     const base = new URL(app.path, location.href);
-    if (NEEDS_TICKET[app.id] && inTg) {
-      try {
-        const el = document.getElementById('status');
-        if (el) el.textContent = 'Đang mở ' + app.name + '…';
-        base.searchParams.set('t', await mintTicket());
-      } catch (e) { /* không phát được vé → app sẽ báo chờ duyệt */ }
-    }
-    window.location.href = base.href;
+    const h = launchHash();
+    window.location.href = h ? base.href.split('#')[0] + '#' + h : base.href;
     return;
   }
   if (inTg) tg.openLink(app.url);

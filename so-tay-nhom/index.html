@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sổ Tay Nhóm</title>
 <link rel="preconnect" href="https://telegram.org" crossorigin>
+<link rel="preconnect" href="https://games-hub-api.hdkhoa1302.workers.dev" crossorigin>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="../shared/icons.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -169,7 +170,7 @@
  * cho Worker; Worker tự xác minh chữ ký rồi mới trả dữ liệu.
  * Firestore rules không tính được HMAC nên không thể làm thay.
  * ============================================================ */
-const API = 'https://games-hub-api.PLACEHOLDER.workers.dev';   // ← điền sau khi deploy worker/
+const API = 'https://games-hub-api.hdkhoa1302.workers.dev';
 const GROUP_NAME = '6 thằng già không ngồi chung có 1 thằng VinGroup';
 const GATE_HREF = 'https://t.me/c/1769279835/1';                // mở nhóm (chỉ thành viên vào được)
 const CACHE_KEY = 'stn_cache_v1';
