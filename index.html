@@ -54,7 +54,6 @@
     --ico-alpha:.14;          /* độ đậm nền khung icon */
     --ico-edge:.26;           /* độ đậm viền khung icon */
     --ico-sat:62%;            /* độ bão hoà nét icon */
-    --ink-shift:0%;           /* nền tối: giữ nguyên độ sáng nét */
 
     --r-md:8px;
     --r-lg:12px;
@@ -89,7 +88,6 @@
     --ico-alpha:.11;
     --ico-edge:.22;
     --ico-sat:58%;
-    --ink-shift:18%;          /* nền sáng: kéo nét icon đậm xuống cho đủ tương phản */
   }
 
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -297,7 +295,7 @@ const APPS = [
     name: 'Poly Farm',
     icon: 'wheat',                     // tên icon trong shared/icons.js (Lucide)
     tint: 108,                         // hue khung icon
-    ink: 62,                           // độ sáng nét — hạ cho hue vốn đã sáng
+    ink: 48, inkLight: 36,            // L tính riêng để độ chói = nhau
     desc: 'Nông trại 2D low-poly: trồng cây, thu hoạch, chăn nuôi',
     path: 'poly-farm/',
     url: 'https://hdkhoa1302.github.io/poly-farm/poly-farm/'
@@ -307,7 +305,7 @@ const APPS = [
     name: '2048',
     icon: 'grid-2x2',
     tint: 34,
-    ink: 58,
+    ink: 61, inkLight: 42,
     desc: 'Ghép ô cùng số, đạt 2048 để thắng — có bảng xếp hạng',
     path: '2048/',
     url: 'https://hdkhoa1302.github.io/poly-farm/2048/'
@@ -317,7 +315,7 @@ const APPS = [
     name: 'Dẹp Loạn Đình Làng 3D',
     icon: 'castle',
     tint: 352,
-    ink: 68,
+    ink: 75, inkLight: 58,
     desc: 'Platformer 3D: đạp đầu quái, ăn nấm, lấy sớ vàng',
     path: 'dinh-lang-3d/',
     url: 'https://hdkhoa1302.github.io/poly-farm/dinh-lang-3d/'
@@ -327,7 +325,7 @@ const APPS = [
     name: 'Sổ Tay Nhóm',
     icon: 'book-open',
     tint: 232,
-    ink: 66,
+    ink: 77, inkLight: 63,
     desc: 'Tóm tắt mỗi 100 tin nhắn nhóm — chỉ thành viên xem',
     path: 'so-tay-nhom/',
     url: 'https://hdkhoa1302.github.io/poly-farm/so-tay-nhom/'
@@ -397,6 +395,7 @@ if (!APPS.length) {
     btn.dataset.id = app.id;
     if (app.tint != null) btn.style.setProperty('--tint', app.tint);
     if (app.ink != null) btn.style.setProperty('--app-ink', app.ink + '%');
+    if (app.inkLight != null) btn.style.setProperty('--app-ink-light', app.inkLight + '%');
     btn.innerHTML =
       `<span class="ico"><i data-icon="${app.icon}" data-size="22"></i></span>` +
       `<span class="meta"><span class="name"></span><span class="desc"></span></span>` +
