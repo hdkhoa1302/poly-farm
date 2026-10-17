@@ -1,38 +1,84 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>App Hub — Telegram Mini Apps</title>
+
+<!-- Nạp SDK sớm + chốt theme TRƯỚC khi vẽ để không nháy màu -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var inTg = !!(tg && tg.platform && tg.platform !== 'unknown');
+  var scheme = inTg
+    ? (tg.colorScheme === 'light' ? 'light' : 'dark')
+    : (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', scheme);
+  window.__inTg = inTg;
+})();
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
+  /* ============================================================
+     Tokens — nền tảng Linear: dark mặc định, light tương ứng
+     ============================================================ */
   :root{
-    /* Linear-derived tokens */
     --bg:#08090a;
-    --panel:#0f1011;
     --surface:#191a1b;
     --surface-hi:#28282c;
 
     --text:#f7f8f8;
     --body:#d0d6e0;
     --muted:#8a8f98;
-    --faint:#62666d;
 
     --border:rgba(255,255,255,.08);
     --border-subtle:rgba(255,255,255,.05);
-    --border-hair:rgba(255,255,255,.04);
+    --border-hair:rgba(255,255,255,.045);
+
+    --row:rgba(255,255,255,.022);
+    --row-hover:rgba(255,255,255,.055);
 
     --accent:#5e6ad2;
     --accent-hi:#828fff;
     --ok:#27a644;
 
-    --r-sm:6px;
+    --mark-shadow:0 0 0 1px rgba(255,255,255,.06), 0 6px 18px rgba(94,106,210,.30);
+    --ico-light:58%;          /* độ sáng của sắc thái icon */
+    --ico-alpha:.22;          /* độ đậm nền icon */
+
     --r-md:8px;
     --r-lg:12px;
-
     --ease:cubic-bezier(.22,.61,.36,1);
+  }
+
+  :root[data-theme="light"]{
+    --bg:#ffffff;
+    --surface:#f4f5f6;
+    --surface-hi:#e7e9eb;
+
+    --text:#0b0c0e;
+    --body:#3d434b;
+    --muted:#667085;
+
+    --border:rgba(9,10,12,.13);
+    --border-subtle:rgba(9,10,12,.08);
+    --border-hair:rgba(9,10,12,.055);
+
+    --row:rgba(9,10,12,.022);
+    --row-hover:rgba(9,10,12,.045);
+
+    --accent:#5e6ad2;
+    --accent-hi:#4a54c4;
+    --ok:#12833a;
+
+    --mark-shadow:0 0 0 1px rgba(9,10,12,.05), 0 6px 16px rgba(94,106,210,.26);
+    --ico-light:46%;
+    --ico-alpha:.15;
   }
 
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -47,29 +93,23 @@
     font-feature-settings:'cv01','ss03';
     background:var(--bg);
     color:var(--text);
-    min-height:100vh;
-    min-height:100dvh;
-    display:flex;
-    justify-content:center;
+    min-height:100vh;min-height:100dvh;
+    display:flex;justify-content:center;
     letter-spacing:-.011em;
+    transition:background .22s var(--ease),color .22s var(--ease);
   }
 
   .shell{
-    width:100%;
-    max-width:520px;
-    min-height:100vh;
-    min-height:100dvh;
-    padding:calc(20px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
-    display:flex;
-    flex-direction:column;
-    gap:22px;
+    width:100%;max-width:520px;
+    min-height:100vh;min-height:100dvh;
+    padding:calc(20px + env(safe-area-inset-top)) 18px calc(22px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:22px;
   }
 
-  /* đẩy footer xuống đáy → bố cục không còn "chết" ở dưới */
+  /* .top + .foot cùng margin-top:auto → khối nội dung cân giữa vùng trên, footer neo đáy */
   .foot{margin-top:auto}
 
-  /* ---------- top bar ---------- */
-  /* margin-top:auto + .foot{margin-top:auto} → khối nội dung cân giữa vùng trên footer */
+  /* ---------------- top bar ---------------- */
   .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
 
   .brand{display:flex;align-items:center;gap:10px;min-width:0}
@@ -79,21 +119,18 @@
     border-radius:var(--r-md);
     background:linear-gradient(160deg,var(--accent),#4a52a8);
     display:grid;place-items:center;
-    font-size:15px;font-weight:600;color:#fff;
-    box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 4px 14px rgba(94,106,210,.28);
+    font-size:15px;font-weight:600;color:#fff;letter-spacing:0;
+    box-shadow:var(--mark-shadow);
   }
 
-  .brand h1{
-    font-size:15px;font-weight:500;letter-spacing:-.02em;
-    line-height:1.2;
-  }
+  .brand h1{font-size:15px;font-weight:500;letter-spacing:-.02em;line-height:1.2}
   .brand p{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:1px}
 
   .you{
     display:flex;align-items:center;gap:7px;
     padding:5px 10px 5px 5px;
     border:1px solid var(--border-subtle);
-    background:rgba(255,255,255,.02);
+    background:var(--row);
     border-radius:9999px;
     font-size:12px;font-weight:500;color:var(--body);
     max-width:46%;
@@ -106,7 +143,7 @@
   }
   .you span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  /* ---------- section label ---------- */
+  /* ---------------- section label ---------------- */
   .label-row{display:flex;align-items:baseline;justify-content:space-between;padding:0 2px}
   .overline{
     font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
@@ -114,61 +151,69 @@
   }
   .count{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--muted)}
 
-  /* ---------- app list ---------- */
+  /* ---------------- app list ---------------- */
   .apps{display:flex;flex-direction:column;gap:8px}
 
   .app{
     display:flex;align-items:center;gap:13px;width:100%;text-align:left;
-    padding:12px 12px;
-    background:rgba(255,255,255,.02);
+    padding:12px;
+    background:var(--row);
     border:1px solid var(--border-subtle);
     border-radius:var(--r-lg);
     color:inherit;font:inherit;cursor:pointer;
     transition:background .16s var(--ease),border-color .16s var(--ease),transform .16s var(--ease);
     -webkit-appearance:none;appearance:none;
   }
-  .app:hover{background:rgba(255,255,255,.05);border-color:var(--border);transform:translateX(2px)}
+  .app:hover{background:var(--row-hover);border-color:var(--border);transform:translateX(2px)}
   .app:active{transform:translateX(1px) scale(.995)}
   .app:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent-hi);border-color:transparent}
 
+  /* Icon: mọi app chung 1 khung, mỗi app 1 sắc thái riêng qua --tint */
   .ico{
     width:42px;height:42px;flex:none;
     border-radius:11px;
-    background:var(--surface);
-    border:1px solid var(--border-hair);
+    background:
+      radial-gradient(130% 130% at 28% 16%,
+        hsl(var(--tint,240) 62% var(--ico-light) / var(--ico-alpha)), transparent 68%),
+      var(--surface);
+    border:1px solid hsl(var(--tint,240) 50% var(--ico-light) / .24);
     display:grid;place-items:center;
-    font-size:21px;line-height:1;
+    font-size:20px;line-height:1;
+    transition:border-color .16s var(--ease);
   }
+  /* chuẩn hoá độ "nặng" thị giác giữa các emoji khác nhau */
+  .ico > i{font-style:normal;display:block;transform:translateY(.5px);line-height:1}
+  .app:hover .ico{border-color:hsl(var(--tint,240) 55% var(--ico-light) / .42)}
 
   .meta{flex:1;min-width:0}
   .name{display:block;font-size:14.5px;font-weight:500;letter-spacing:-.017em;color:var(--text)}
   .desc{
-    display:block;font-size:12.5px;color:#9aa1ab;line-height:1.45;margin-top:2px;
+    display:block;font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:2px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
 
   .chev{
-    flex:none;color:var(--faint);font-size:17px;line-height:1;
-    transition:color .16s var(--ease),transform .16s var(--ease);
+    flex:none;color:var(--muted);opacity:.65;font-size:17px;line-height:1;
+    transition:color .16s var(--ease),opacity .16s var(--ease),transform .16s var(--ease);
   }
-  .app:hover .chev{color:var(--accent-hi);transform:translateX(1px)}
+  .app:hover .chev{color:var(--accent-hi);opacity:1;transform:translateX(1px)}
 
-  /* ---------- empty / footer ---------- */
+  /* ---------------- empty / footer ---------------- */
   .empty{
     padding:44px 16px;text-align:center;
     border:1px dashed var(--border-subtle);border-radius:var(--r-lg);
-    color:var(--faint);font-size:12.5px;line-height:1.6;
+    color:var(--muted);font-size:12.5px;line-height:1.6;
   }
 
   .foot{
     display:flex;align-items:center;gap:7px;
     padding-top:12px;border-top:1px solid var(--border-hair);
   }
-  .dot{width:5px;height:5px;border-radius:50%;background:var(--faint);flex:none;transition:background .3s}
-  .dot.on{background:var(--ok)}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--muted);opacity:.45;flex:none;transition:background .3s,opacity .3s}
+  .dot.on{background:var(--ok);opacity:1}
   .foot span{font-size:11px;color:var(--muted)}
 
-  /* ---------- motion ---------- */
+  /* ---------------- motion ---------------- */
   @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
   .app,.empty{animation:rise .34s var(--ease) both}
   .app:nth-child(1){animation-delay:.02s}
@@ -214,20 +259,22 @@
 
 </main>
 
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="shared/games-hub.js"></script>
 <script>
 /* ============================================================
  * App Hub — launcher cho Telegram Mini Apps
- * Thêm app mới: thêm 1 entry vào APPS bên dưới.
- *   path  — đường dẫn tương đối, mở ngay trong webview (không cần BotFather)
- *   url   — URL tuyệt đối, chỉ dùng làm fallback ngoài Telegram
+ *
+ * Thêm app mới: 1 entry vào APPS.
+ *   path  — đường dẫn tương đối, mở NGAY trong webview (không cần BotFather)
+ *   url   — URL tuyệt đối, fallback khi mở ngoài Telegram
+ *   tint  — hue 0-360, cho khung icon một sắc thái riêng
  * ============================================================ */
 const APPS = [
   {
     id: 'poly-farm',
     name: 'Poly Farm',
     icon: '🌾',
+    tint: 108,
     desc: 'Nông trại 2D low-poly: trồng cây, thu hoạch, chăn nuôi',
     path: 'poly-farm/',
     url: 'https://hdkhoa1302.github.io/poly-farm/poly-farm/'
@@ -236,6 +283,7 @@ const APPS = [
     id: '2048',
     name: '2048',
     icon: '🔢',
+    tint: 34,
     desc: 'Ghép ô cùng số, đạt 2048 để thắng — có bảng xếp hạng',
     path: '2048/',
     url: 'https://hdkhoa1302.github.io/poly-farm/2048/'
@@ -244,6 +292,7 @@ const APPS = [
     id: 'dinh-lang-3d',
     name: 'Dẹp Loạn Đình Làng 3D',
     icon: '🏯',
+    tint: 352,
     desc: 'Platformer 3D: đạp đầu tham quan, ăn nấm, chui cống lấy sớ vàng',
     path: 'dinh-lang-3d/',
     url: 'https://hdkhoa1302.github.io/poly-farm/dinh-lang-3d/'
@@ -252,38 +301,52 @@ const APPS = [
   //   id: 'tetris',
   //   name: 'Tetris',
   //   icon: '🧱',
+  //   tint: 200,
   //   desc: 'Xếp hình cổ điển',
   //   path: 'tetris/',
   //   url: 'https://hdkhoa1302.github.io/poly-farm/tetris/'
   // }
 ];
 
-/* ---------- Telegram context ---------- */
+/* ---------------- Telegram context ---------------- */
 const tg = window.Telegram?.WebApp;
-/* telegram-web-app.js luôn tạo window.Telegram, kể cả ngoài Telegram.
-   Phân biệt thật bằng platform (ngoài Telegram = 'unknown'). */
-const inTg = !!(tg && tg.platform && tg.platform !== 'unknown');
+const inTg = !!window.__inTg;
+
 if (inTg) {
   tg.ready();
   tg.expand();
-  try { tg.setHeaderColor('#08090a'); tg.setBackgroundColor('#08090a'); } catch (e) {}
+  syncChrome();
 }
 
-/* ---------- player chip ---------- */
+/* Đồng bộ màu header/background của Telegram với theme đang dùng */
+function syncChrome() {
+  if (!inTg) return;
+  const bg = document.documentElement.getAttribute('data-theme') === 'light' ? '#ffffff' : '#08090a';
+  try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } catch (e) {}
+}
+
+/* Người dùng đổi theme trong Telegram → đổi ngay, không cần tải lại */
+if (inTg && tg.onEvent) {
+  tg.onEvent('themeChanged', () => {
+    document.documentElement.setAttribute('data-theme', tg.colorScheme === 'light' ? 'light' : 'dark');
+    syncChrome();
+  });
+}
+
+/* ---------------- player chip ---------------- */
 (function renderYou() {
   const el = document.getElementById('you');
   if (!inTg || !window.GamesHub) return;
   const p = GamesHub.player();
   if (!p || !p.name) return;
   el.hidden = false;
-  const avatar = p.photo
+  el.innerHTML = (p.photo
     ? `<img src="${p.photo}" alt="">`
-    : `<span class="pip">${p.name.trim().charAt(0).toUpperCase()}</span>`;
-  el.innerHTML = `${avatar}<span></span>`;
+    : `<span class="pip">${p.name.trim().charAt(0).toUpperCase()}</span>`) + '<span></span>';
   el.querySelector('span:last-child').textContent = p.name;
 })();
 
-/* ---------- render apps ---------- */
+/* ---------------- render apps ---------------- */
 const list = document.getElementById('app-list');
 const empty = document.getElementById('empty');
 document.getElementById('count').textContent = String(APPS.length).padStart(2, '0');
@@ -297,10 +360,12 @@ if (!APPS.length) {
     btn.className = 'app';
     btn.type = 'button';
     btn.dataset.id = app.id;
+    if (app.tint != null) btn.style.setProperty('--tint', app.tint);
     btn.innerHTML =
-      `<span class="ico">${app.icon}</span>` +
+      `<span class="ico"><i></i></span>` +
       `<span class="meta"><span class="name"></span><span class="desc"></span></span>` +
       `<span class="chev">›</span>`;
+    btn.querySelector('.ico > i').textContent = app.icon;
     btn.querySelector('.name').textContent = app.name;
     btn.querySelector('.desc').textContent = app.desc;
     btn.addEventListener('click', () => openApp(app));
@@ -319,7 +384,18 @@ function openApp(app) {
   else window.open(app.url, '_blank');
 }
 
-/* ---------- status ---------- */
+/* ---------------- deep link: ?startapp=<appId> mở thẳng 1 app ---------------- */
+/* Dùng cho nút trong GROUP: Telegram chặn nút web_app ở group, nên nút group là
+   link t.me/<bot>?startapp=<appId> → mở Mini App (hub) rồi tự nhảy vào app. */
+(function autoOpenFromStartParam() {
+  const sp = (inTg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
+          || new URLSearchParams(location.search).get('startapp');
+  if (!sp) return;
+  const app = APPS.find(a => a.id === sp);
+  if (app) setTimeout(() => openApp(app), 300);
+})();
+
+/* ---------------- status ---------------- */
 const dot = document.getElementById('dot');
 const status = document.getElementById('status');
 if (inTg) {
