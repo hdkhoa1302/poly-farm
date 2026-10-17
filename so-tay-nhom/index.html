@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sổ Tay Nhóm</title>
+<link rel="preconnect" href="https://telegram.org" crossorigin>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="../shared/icons.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,8 +20,8 @@
   }
   html[data-theme="light"]{
     --bg:#ffffff; --panel:#fafafa; --surface:#f4f4f5; --surface-hi:#e8e8ea;
-    --text:#08090a; --body:#3c4149; --muted:#6f6e77; --faint:#8a8f98;
-    --border:rgba(0,0,0,.09); --border-subtle:rgba(0,0,0,.06); --border-hair:rgba(0,0,0,.045);
+    --text:#08090a; --body:#3c4149; --muted:#5f6675; --faint:#8a8f98;
+    --border:rgba(0,0,0,.12); --border-subtle:rgba(0,0,0,.08); --border-hair:rgba(0,0,0,.055);
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   [hidden]{display:none!important}
@@ -35,14 +36,20 @@
 
   /* ---------- top ---------- */
   .top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
-  .brand{display:flex;align-items:center;gap:10px;min-width:0}
-  /* cần min-width:0 để ellipsis hoạt động trong flex (nếu không, text sẽ đẩy tràn) */
+  .brand{display:flex;align-items:center;gap:9px;min-width:0}
+  /* min-width:0 để ellipsis hoạt động trong flex (nếu không, text sẽ đẩy tràn) */
   .brand>div:last-child{min-width:0}
+  .back{width:32px;height:32px;flex:none;display:grid;place-items:center;padding:0;border-radius:9px;
+        border:1px solid var(--border-subtle);background:rgba(127,127,127,.07);color:var(--body);cursor:pointer;
+        transition:background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease),transform .1s var(--ease)}
+  .back svg{width:16px;height:16px;display:block}
+  .back:hover{background:rgba(127,127,127,.14);border-color:var(--border);color:var(--text)}
+  .back:active{transform:scale(.95)}
   .mark{width:34px;height:34px;flex:none;border-radius:10px;background:linear-gradient(160deg,var(--accent),#4a52a8);display:grid;place-items:center;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 4px 14px rgba(94,106,210,.28)}
   .mark svg{width:17px;height:17px;display:block;stroke-width:2.1}
   .brand h1{font-size:15.5px;font-weight:500;letter-spacing:-.02em;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .brand p{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .you{display:flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;border:1px solid var(--border-subtle);background:rgba(127,127,127,.06);border-radius:9999px;font-size:12px;font-weight:500;color:var(--body);flex:0 1 auto;min-width:0;max-width:42%}
+  .you{display:flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;border:1px solid var(--border-subtle);background:rgba(127,127,127,.06);border-radius:9999px;font-size:12px;font-weight:500;color:var(--body);flex:0 1 auto;min-width:0;max-width:38%}
   .you img,.you .pip{width:20px;height:20px;border-radius:50%;flex:none;object-fit:cover;background:var(--surface-hi);display:grid;place-items:center;font-size:10px;font-weight:600}
   .you span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -81,6 +88,7 @@
   .dg .body b,.dg .body strong{color:var(--text);font-weight:600}
   .dg .body code{font-family:'JetBrains Mono',monospace;font-size:12px;background:rgba(127,127,127,.14);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere;word-break:break-word}
   .dg .body img,.dg .body table{max-width:100%}
+  .dg .body .body-load{margin:10px 0;color:var(--muted);font-size:12.5px}
 
   /* ---------- misc ---------- */
   .foot{display:flex;align-items:center;gap:7px;padding-top:12px;border-top:1px solid var(--border-hair);margin-top:auto;min-width:0}
@@ -101,7 +109,7 @@
     .dg .body{padding:2px 12px 14px;font-size:13px}
     .dg .body ul{margin-left:16px}
     .brand h1{font-size:14.5px}
-    .you{max-width:38%}
+    .you{max-width:34%}
   }
   /* màn rộng: thêm chút thoáng */
   @media (min-width:520px){
@@ -114,6 +122,9 @@
 
   <header class="top">
     <div class="brand">
+      <button class="back" id="back" type="button" aria-label="Về App Hub" title="Về App Hub">
+        <i data-icon="arrow-left" data-size="16"></i>
+      </button>
       <div class="mark"><i data-icon="book-open" data-size="17"></i></div>
       <div>
         <h1>Sổ Tay Nhóm</h1>
@@ -128,7 +139,6 @@
     <h2 id="gateTitle">Chỉ thành viên nhóm mới xem được</h2>
     <p id="gateText">Mở app này từ trong nhóm chat nhé.</p>
     <button id="gateBtn" hidden>Đóng</button>
-    <div id="diag" style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--faint);line-height:1.7;word-break:break-all"></div>
   </section>
 
   <div class="label-row" id="listLabel" hidden>
@@ -151,193 +161,123 @@
 /* ============================================================
  * Sổ Tay Nhóm — tóm tắt hội thoại nhóm, chỉ thành viên xem được
  * ------------------------------------------------------------
- * Dữ liệu do cron job của Hermes ghi vào Firestore mỗi khi nhóm
- * tích đủ 100 tin nhắn mới.
- * Cổng vào: chỉ cho mở khi Telegram báo đúng chat_id của nhóm.
+ * Dữ liệu: cron của Hermes tóm tắt mỗi 200 tin nhắn rồi đẩy lên
+ * Worker (worker/src/index.js). App KHÔNG nói trực tiếp với
+ * Firestore nữa → không còn API key nào trong repo.
+ *
+ * Quyền: app gửi nguyên `tg.initData` (Telegram ký HMAC-SHA256)
+ * cho Worker; Worker tự xác minh chữ ký rồi mới trả dữ liệu.
+ * Firestore rules không tính được HMAC nên không thể làm thay.
  * ============================================================ */
-const GROUP_ID   = '-1001769279835';
+const API = 'https://games-hub-api.PLACEHOLDER.workers.dev';   // ← điền sau khi deploy worker/
 const GROUP_NAME = '6 thằng già không ngồi chung có 1 thằng VinGroup';
-const APP_PATH   = 'games/group-digest/scores';     // Firestore: games/{appId}/scores
+const GATE_HREF = 'https://t.me/c/1769279835/1';                // mở nhóm (chỉ thành viên vào được)
+const CACHE_KEY = 'stn_cache_v1';
 
-const FS_BASE = 'https://firestore.googleapis.com/v1/projects/taichinhcanhan-9fcf2/databases/(default)/documents';
-const FS_KEY  = 'AIzaSyATvxstwU8NM81b8osYBDwmtcL9zAQfdhk';
-
-const tg     = window.Telegram && window.Telegram.WebApp;
-const inTg   = !!(tg && tg.platform && tg.platform !== 'unknown');
-const user   = (inTg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
-const chat   = (inTg && tg.initDataUnsafe && tg.initDataUnsafe.chat) || null;
+const tg   = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.platform && tg.platform !== 'unknown');
+const $    = id => document.getElementById(id);
 
 if (inTg) {
   tg.ready(); tg.expand();
-  try { tg.setHeaderColor('#08090a'); tg.setBackgroundColor('#08090a'); } catch (e) {}
   if (tg.onEvent) tg.onEvent('themeChanged', () => {
     document.documentElement.setAttribute('data-theme', tg.colorScheme === 'light' ? 'light' : 'dark');
   });
   document.documentElement.setAttribute('data-theme', tg.colorScheme === 'light' ? 'light' : 'dark');
 }
 
-const $ = id => document.getElementById(id);
+/* ---------------- gọi Worker ---------------- */
+const initData = () => (inTg && tg.initData) || '';
 
-/* ---------------- cổng vào: vé do Hub phát ---------------- */
-/* Trang con không có initData (điều hướng trong webview làm mất context Telegram)
-   nên không tự xác thực được. Hub còn nguyên initData → hub phát vé vào Firestore,
-   app đọc vé: chưa duyệt / hết hạn / không vé thì không tải nội dung. */
-const TOKEN = new URLSearchParams(location.search).get('t') || '';
-const fromGroup = !!(chat && String(chat.id) === GROUP_ID);
-
-/* Danh sách được duyệt: games/group-digest-members/scores/tg_<user_id> */
-async function approved(uid) {
-  if (!uid) return false;
+async function api(path) {
+  const u = new URL(API + path);
+  u.searchParams.set('initData', initData());
   try {
-    const r = await fetch(FS_BASE + '/games/group-digest-members/scores/tg_' + encodeURIComponent(uid) + '?key=' + FS_KEY);
-    if (!r.ok) return false;
-    return !!(await r.json()).fields;
-  } catch (e) { return false; }
+    const r = await fetch(u.toString());
+    let body = null;
+    try { body = await r.json(); } catch (e) {}
+    return { status: r.status, body };
+  } catch (e) {
+    return { status: 0, body: null };
+  }
 }
 
-function myName() {
-  return user ? ([user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || '') : '';
+/* ---------------- cache cục bộ: mở lại là thấy ngay ---------------- */
+let cache = { who: null, rows: [], bodies: {} };
+try { cache = Object.assign(cache, JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')); } catch (e) {}
+let cacheTimer = null;
+function saveCache() {
+  clearTimeout(cacheTimer);
+  cacheTimer = setTimeout(() => {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+  }, 250);
 }
 
-/* Thứ tự xét quyền:
-   1) Telegram nói đang mở từ đúng nhóm        → cho xem luôn
-   2) user id có trong danh sách đã duyệt      → cho xem (initData do Telegram ký)
-   3) có vé do Hub phát (hub còn initData)     → theo cờ allow của vé
-   4) còn lại                                  → chờ duyệt                            */
-async function ticketCheck() {
-  if (!inTg) return { ok: false, why: 'no-tg' };
-  if (fromGroup) return { ok: true, who: myName() };
-  if (user && await approved(user.id)) return { ok: true, who: myName() };
-  if (!TOKEN) return { ok: false, why: 'pending', who: myName() };
-  try {
-    const r = await fetch(FS_BASE + '/games/group-digest-tickets/scores/' + encodeURIComponent(TOKEN) + '?key=' + FS_KEY);
-    if (!r.ok) return { ok: false, why: 'pending', who: myName() };
-    const f = ((await r.json()).fields) || {};
-    const allow = !!(f.allow && f.allow.booleanValue);
-    const exp = parseInt((f.score || {}).integerValue || '0', 10);
-    const who = (f.userName || {}).stringValue || myName();
-    if (!allow) return { ok: false, why: 'pending', who };
-    if (exp && exp < Math.floor(Date.now() / 1000)) return { ok: false, why: 'ticket-expired', who };
-    return { ok: true, who };
-  } catch (e) { return { ok: false, why: 'offline' }; }
-}
-
-/* Icon lấy từ shared/icons.js (Lucide) — không dùng emoji */
+/* ---------------- trạng thái chặn ---------------- */
 const GATES = {
   'no-tg': ['lock', 'Mở app trong Telegram',
-    'Sổ Tay Nhóm chỉ mở được bằng Telegram (Mini App). Hiện tại bạn đang mở bằng trình duyệt nên không xem được nội dung.'],
-  'pending': ['clock', 'Chờ duyệt',
+    'Sổ Tay Nhóm chỉ mở được bằng Telegram (Mini App). Bạn đang mở bằng trình duyệt nên không xem được nội dung.'],
+  'bad-signature': ['lock', 'Không xác minh được Telegram',
+    'Telegram không gửi kèm chữ ký hợp lệ. Đóng app rồi mở lại từ nút trong nhóm nhé.'],
+  'expired': ['hourglass', 'Phiên Telegram đã cũ',
+    'Chữ ký quá 24 giờ. Đóng rồi mở lại app là có phiên mới.'],
+  'not-member': ['clock', 'Chờ duyệt',
     'Bạn chưa có tên trong danh sách xem sổ. Nhắn một câu vào nhóm để xin quyền — duyệt xong mở lại là đọc được ngay.'],
-  'ticket-expired': ['hourglass', 'Phiên xem đã hết hạn',
-    'Vé vào sổ sống 15 phút. Bấm lại nút Sổ Tay Nhóm trong nhóm là có vé mới.'],
-  'offline': ['wifi-off', 'Không kiểm tra được quyền',
-    'Mạng đang chập. Thử lại sau ít phút nhé.']
+  'offline': ['wifi-off', 'Không kết nối được',
+    'Mạng đang chập hoặc máy chủ chưa sẵn sàng. Thử lại sau ít phút nhé.']
 };
 
 function showGate(kind, who) {
-  const g = GATES[kind] || GATES['pending'];
+  const g = GATES[kind] || GATES['offline'];
+  clearSkeletons();
   $('gate').hidden = false;
-  $('gateIcon').innerHTML = (window.Icons ? Icons.get(g[0], 24) : '');
+  $('gateIcon').innerHTML = window.Icons ? Icons.get(g[0], 24) : '';
   $('gateTitle').textContent = g[1];
   $('gateText').innerHTML = esc(g[2]) + (who ? '<br><br>Đang xin cho: <b>' + esc(who) + '</b>' : '');
-  $('status').textContent = inTg ? 'Đang chạy trong Telegram' : 'Đang chạy trên trình duyệt';
+  $('listLabel').hidden = true;
+  $('status').textContent = 'Chưa mở được';
   if (inTg) {
     const btn = $('gateBtn');
     btn.hidden = false;
     btn.textContent = 'Mở nhóm để xin quyền';
-    btn.onclick = () => { try { tg.openTelegramLink('https://t.me/c/1769279835/1'); } catch (e) {} };
+    btn.onclick = () => { try { tg.openTelegramLink(GATE_HREF); } catch (e) {} };
   }
 }
 
-function diag(extra) {
-  const el = $('diag');
-  if (!el) return;
-  const ci = tg && tg.initData ? tg.initData.length : 0;
-  el.textContent = [
-    'plat=' + (tg ? (tg.platform || '?') : 'no-tg'),
-    'initData=' + ci,
-    't=' + (TOKEN ? TOKEN.slice(0, 6) + '…' : 'không có'),
-    'chat=' + (chat ? chat.id + '/' + chat.type : '-'),
-    'user=' + (user ? user.id : '-'),
-    'href=' + location.href.replace(/^https:\/\//, '').slice(0, 70),
-    extra || ''
-  ].filter(Boolean).join(' · ');
+/* ---------------- skeleton ---------------- */
+function showSkeletons() {
+  $('list').innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const d = document.createElement('div');
+    d.className = 'skeleton';
+    $('list').appendChild(d);
+  }
+}
+function clearSkeletons() {
+  if ($('list').querySelector('.skeleton')) $('list').innerHTML = '';
 }
 
-(async function boot() {
-  const t = await ticketCheck();
-  if (t.ok) start(t.who);
-  else { showGate(t.why, t.who); diag('why=' + t.why); }
-})();
-
-/* ---------------- hiển thị người xem ---------------- */
-function renderYou(fallbackName) {
-  const name = user
-    ? ([user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || 'Bạn')
-    : (fallbackName || '');
+/* ---------------- người xem ---------------- */
+function renderYou(who) {
+  const name = (who && (who.name || who.username)) || '';
   if (!name) return;
   const el = $('you');
-  if (!user || !user.photo_url) {
-    el.hidden = false;
-    el.innerHTML = '<span class="pip">' + esc(name.charAt(0).toUpperCase()) + '</span><span></span>';
-    el.querySelector('span:last-child').textContent = name;
-    return;
-  }
   el.hidden = false;
-  el.innerHTML = (user.photo_url ? '<img src="' + user.photo_url + '" alt="">'
-                 : '<span class="pip">' + name.charAt(0).toUpperCase() + '</span>') + '<span></span>';
+  el.innerHTML = (who.photo
+      ? '<img src="' + esc(who.photo) + '" alt="">'
+      : '<span class="pip">' + esc(name.charAt(0).toUpperCase()) + '</span>')
+    + '<span></span>';
   el.querySelector('span:last-child').textContent = name;
 }
 
-function start(who) {
-  renderYou(who);
-  $('subtitle').textContent = GROUP_NAME;
-  $('status').textContent = 'Đang tải sổ tay…';
-  ['skeleton','skeleton','skeleton'].forEach(() => {
-    const d = document.createElement('div'); d.className = 'skeleton'; $('list').appendChild(d);
-  });
-  load();
-  setInterval(load, 60000);
-}
-
-/* ---------------- Firestore ---------------- */
-function val(f, k) {
-  const v = f[k];
-  if (!v) return null;
-  if (v.stringValue   !== undefined) return v.stringValue;
-  if (v.integerValue  !== undefined) return parseInt(v.integerValue, 10);
-  if (v.doubleValue   !== undefined) return Number(v.doubleValue);
-  if (v.timestampValue!== undefined) return v.timestampValue;
-  if (v.booleanValue  !== undefined) return v.booleanValue;
-  return null;
-}
-
-async function fetchDigests() {
-  const url = FS_BASE + '/' + APP_PATH + '?key=' + FS_KEY + '&pageSize=100&orderBy=score%20desc';
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-  return (data.documents || []).map(doc => {
-    const f = doc.fields || {};
-    return {
-      n: val(f, 'score') || 0,
-      title: val(f, 'title') || ('Kỳ #' + (val(f, 'score') || 0)),
-      text: val(f, 'text') || '',
-      fromTs: val(f, 'fromTs'), toTs: val(f, 'toTs'),
-      msgs: val(f, 'msgCount') || 0,
-      chatTitle: val(f, 'chatTitle') || GROUP_NAME
-    };
-  }).filter(d => d.text).sort((a, b) => b.n - a.n);
-}
-
-/* ---------------- render ---------------- */
+/* ---------------- định dạng ---------------- */
 function fmtRange(a, b) {
   const opt = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
   const f = t => { try { return new Date(t).toLocaleString('vi-VN', opt); } catch (e) { return '?'; } };
   if (a && b) {
     try {
       const da = new Date(a), db = new Date(b);
-      // Cùng ngày → bỏ phần ngày lặp lại: "01/01 18:00 → 20:00"
+      // Cùng ngày → bỏ phần ngày lặp lại: "01-01 18:00 → 20:00"
       // (trên màn hẹp, dạng đầy đủ sẽ bị ellipsis cắt mất giờ kết thúc)
       if (da.toDateString() === db.toDateString()) {
         return da.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
@@ -351,8 +291,8 @@ function fmtRange(a, b) {
 
 /* markdown tối giản: **bold**, *italic*, `code`, gạch đầu dòng, tiêu đề ### */
 function md(s) {
-  const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const lines = esc.split(/\r?\n/);
+  const src = String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const lines = src.split(/\r?\n/);
   let out = '', inUl = false;
   const inline = t => t
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
@@ -376,47 +316,123 @@ function md(s) {
   return out;
 }
 
-let lastCount = -1;
+/* ---------------- dựng danh sách ---------------- */
+function bodyHtml(d) {
+  return cache.bodies[d.n] ? md(cache.bodies[d.n])
+                           : '<div class="body-load">Đang tải nội dung…</div>';
+}
+
+function renderList(rows) {
+  $('list').innerHTML = rows.map((d, i) => (
+    '<details class="dg" data-n="' + d.n + '"' + (i === 0 ? ' open' : '') + '>' +
+      '<summary>' +
+        '<span class="no">#' + d.n + '</span>' +
+        '<span class="head"><span class="when">' + esc(d.title || ('Kỳ #' + d.n)) + '</span>' +
+          '<span class="meta">' + fmtRange(d.from, d.to) + ' · ' + (d.msgs || 0) + ' tin</span></span>' +
+        '<span class="chev"><i data-icon="chevron-right" data-size="15"></i></span>' +
+      '</summary>' +
+      '<div class="body">' + bodyHtml(d) + '</div>' +
+    '</details>'
+  )).join('');
+  if (window.Icons) Icons.hydrate($('list'));
+  $('list').querySelectorAll('details[open]').forEach(ensureBody);
+}
+
+/* Nội dung nặng chỉ tải khi mở kỳ đó → danh sách nhẹ, mở nhanh */
+async function ensureBody(det) {
+  const n = +det.dataset.n;
+  const box = det.querySelector('.body');
+  if (!box || !box.querySelector('.body-load')) return;
+  const r = await api('/digest/' + n);
+  if (r.status !== 200 || !r.body || !r.body.digest) {
+    box.innerHTML = '<p class="body-load">Không tải được kỳ này.</p>';
+    return;
+  }
+  cache.bodies[n] = r.body.digest.body;
+  saveCache();
+  box.innerHTML = md(r.body.digest.body);
+}
+
+$('list').addEventListener('toggle', (e) => {
+  if (e.target.tagName === 'DETAILS' && e.target.open) ensureBody(e.target);
+}, true);
+
+/* ---------------- tải dữ liệu ---------------- */
+let lastSig = null;
 
 async function load() {
-  try {
-    const rows = await fetchDigests();
-    $('dot').classList.add('on');
-    $('status').textContent = 'Đã cập nhật · ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    if (!rows.length) {
-      $('list').innerHTML = '';
-      $('empty').hidden = false;
-      $('empty').textContent = 'Chưa có kỳ tóm tắt nào. Sổ sẽ tự ghi khi nhóm tích đủ 100 tin nhắn mới.';
-      $('listLabel').hidden = true;
-      return;
-    }
-    $('empty').hidden = true;
-    $('listLabel').hidden = false;
-    $('count').textContent = String(rows.length).padStart(2, '0') + ' kỳ';
-    if (rows.length === lastCount) return;
-    lastCount = rows.length;
-    $('list').innerHTML = rows.map((d, i) => (
-      '<details class="dg"' + (i === 0 ? ' open' : '') + '>' +
-        '<summary>' +
-          '<span class="no">#' + d.n + '</span>' +
-          '<span class="head"><span class="when">' + esc(d.title) + '</span>' +
-            '<span class="meta">' + fmtRange(d.fromTs, d.toTs) + ' · ' + d.msgs + ' tin</span></span>' +
-          '<span class="chev"><i data-icon="chevron-right" data-size="15"></i></span>' +
-        '</summary>' +
-        '<div class="body">' + md(d.text) + '</div>' +
-      '</details>'
-    )).join('');
-    if (window.Icons) Icons.hydrate($('list'));   // vẽ icon SVG thay vì ký tự
-  } catch (e) {
-    $('dot').classList.remove('on');
-    $('status').textContent = 'Không tải được: ' + e.message;
-    if (lastCount < 0) {
-      $('list').innerHTML = '';
-      $('empty').hidden = false;
-      $('empty').textContent = 'Không kết nối được máy chủ dữ liệu. Kéo lại sau ít phút nhé.';
-    }
+  const r = await api('/digests');
+
+  if (r.status === 403) {
+    showGate((r.body && r.body.error) || 'not-member', cache.who && cache.who.name);
+    return;
   }
+  if (r.status !== 200 || !r.body) {
+    $('dot').classList.remove('on');
+    if (!cache.rows.length) showGate('offline');
+    else $('status').textContent = 'Không cập nhật được';
+    return;
+  }
+
+  $('dot').classList.add('on');
+  $('gate').hidden = true;
+  $('subtitle').textContent = GROUP_NAME;
+  cache.who = r.body.who || cache.who;
+  renderYou(cache.who);
+
+  const rows = r.body.digests || [];
+  $('status').textContent = 'Cập nhật · ' +
+    new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+  if (!rows.length) {
+    clearSkeletons();
+    $('list').innerHTML = '';
+    $('empty').hidden = false;
+    $('empty').textContent = 'Chưa có kỳ tóm tắt nào. Sổ tự ghi khi nhóm tích đủ 200 tin nhắn mới.';
+    $('listLabel').hidden = true;
+    cache.rows = []; saveCache();
+    return;
+  }
+
+  clearSkeletons();
+  $('empty').hidden = true;
+  $('listLabel').hidden = false;
+  $('count').textContent = rows.length + ' kỳ';
+
+  const sig = rows[0].n + ':' + rows.length;
+  if (sig === lastSig && $('list').querySelector('details')) return;   // không vẽ lại vô ích
+  lastSig = sig;
+  cache.rows = rows;
+  saveCache();
+  renderList(rows);
 }
+
+/* ---------------- nút về Hub ---------------- */
+$('back').onclick = () => {
+  try { if (inTg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); } catch (e) {}
+  window.location.href = '../';
+};
+
+/* ---------------- boot ---------------- */
+(function boot() {
+  // 1) hiện ngay từ cache (nếu đã từng mở) → cảm giác mở tức thì
+  if (cache.rows && cache.rows.length) {
+    $('subtitle').textContent = GROUP_NAME;
+    $('listLabel').hidden = false;
+    $('count').textContent = cache.rows.length + ' kỳ';
+    renderYou(cache.who);
+    renderList(cache.rows);
+    $('status').textContent = 'Đang cập nhật…';
+  } else {
+    showSkeletons();
+    $('status').textContent = 'Đang kiểm tra quyền…';
+  }
+  // 2) rồi mới xác minh + lấy dữ liệu thật
+  if (!inTg) { showGate('no-tg'); return; }
+  if (!initData()) { showGate('bad-signature'); return; }
+  load();
+  setInterval(load, 60000);
+})();
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 </script>

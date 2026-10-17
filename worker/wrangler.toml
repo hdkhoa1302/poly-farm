@@ -1,0 +1,16 @@
+name = "games-hub-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Group Telegram được phép đọc Sổ Tay (khớp chat.id trong initData)
+[vars]
+GROUP_ID = "-1001769279835"
+
+# Điền database_id sau khi chạy: wrangler d1 create games-hub
+[[d1_databases]]
+binding = "DB"
+database_name = "games-hub"
+database_id = "PLACEHOLDER"
+
+[observability]
+enabled = true
