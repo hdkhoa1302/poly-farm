@@ -2,138 +2,330 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🎮 App Hub - Telegram Mini Apps</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>App Hub — Telegram Mini Apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    color: #fff; min-height: 100vh; padding: 24px 16px;
+  :root{
+    /* Linear-derived tokens */
+    --bg:#08090a;
+    --panel:#0f1011;
+    --surface:#191a1b;
+    --surface-hi:#28282c;
+
+    --text:#f7f8f8;
+    --body:#d0d6e0;
+    --muted:#8a8f98;
+    --faint:#62666d;
+
+    --border:rgba(255,255,255,.08);
+    --border-subtle:rgba(255,255,255,.05);
+    --border-hair:rgba(255,255,255,.04);
+
+    --accent:#5e6ad2;
+    --accent-hi:#828fff;
+    --ok:#27a644;
+
+    --r-sm:6px;
+    --r-md:8px;
+    --r-lg:12px;
+
+    --ease:cubic-bezier(.22,.61,.36,1);
   }
-  .container { max-width: 480px; margin: 0 auto; }
-  h1 { text-align: center; font-size: 26px; margin-bottom: 6px; }
-  .subtitle { text-align: center; color: #aaa; font-size: 14px; margin-bottom: 24px; }
-  .app-card {
-    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 16px; padding: 16px; margin-bottom: 14px;
-    display: flex; align-items: center; gap: 14px;
-    backdrop-filter: blur(8px); transition: transform .15s, background .15s;
+
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+  /* [hidden] phải thắng mọi display do author CSS đặt */
+  [hidden]{display:none!important}
+
+  html{-webkit-text-size-adjust:100%}
+
+  body{
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    font-feature-settings:'cv01','ss03';
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    justify-content:center;
+    letter-spacing:-.011em;
   }
-  .app-card:hover { transform: translateY(-2px); background: rgba(255,255,255,0.12); }
-  .app-icon { font-size: 40px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); border-radius: 12px; }
-  .app-info { flex: 1; }
-  .app-name { font-size: 17px; font-weight: 600; margin-bottom: 2px; }
-  .app-desc { font-size: 13px; color: #bbb; }
-  .play-btn {
-    background: linear-gradient(135deg, #0088cc, #0066aa);
-    color: #fff; border: none; padding: 10px 18px; border-radius: 10px;
-    font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
-    transition: transform .15s, box-shadow .15s;
+
+  .shell{
+    width:100%;
+    max-width:520px;
+    min-height:100vh;
+    min-height:100dvh;
+    padding:calc(20px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+    display:flex;
+    flex-direction:column;
+    gap:22px;
   }
-  .play-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,136,204,0.4); }
-  .empty { text-align: center; color: #888; padding: 40px 0; font-size: 14px; }
-  .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
-  .status { text-align: center; font-size: 12px; color: #81c784; margin-bottom: 16px; }
+
+  /* đẩy footer xuống đáy → bố cục không còn "chết" ở dưới */
+  .foot{margin-top:auto}
+
+  /* ---------- top bar ---------- */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+
+  .mark{
+    width:32px;height:32px;flex:none;
+    border-radius:var(--r-md);
+    background:linear-gradient(160deg,var(--accent),#4a52a8);
+    display:grid;place-items:center;
+    font-size:15px;font-weight:600;color:#fff;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 4px 14px rgba(94,106,210,.28);
+  }
+
+  .brand h1{
+    font-size:15px;font-weight:500;letter-spacing:-.02em;
+    line-height:1.2;
+  }
+  .brand p{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:1px}
+
+  .you{
+    display:flex;align-items:center;gap:7px;
+    padding:5px 10px 5px 5px;
+    border:1px solid var(--border-subtle);
+    background:rgba(255,255,255,.02);
+    border-radius:9999px;
+    font-size:12px;font-weight:500;color:var(--body);
+    max-width:46%;
+  }
+  .you img,.you .pip{
+    width:20px;height:20px;border-radius:50%;flex:none;object-fit:cover;
+    background:var(--surface-hi);
+    display:grid;place-items:center;
+    font-size:10px;font-weight:600;color:var(--body);
+  }
+  .you span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---------- section label ---------- */
+  .label-row{display:flex;align-items:baseline;justify-content:space-between;padding:0 2px}
+  .overline{
+    font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);
+  }
+  .count{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--muted)}
+
+  /* ---------- app list ---------- */
+  .apps{display:flex;flex-direction:column;gap:8px}
+
+  .app{
+    display:flex;align-items:center;gap:13px;width:100%;text-align:left;
+    padding:12px 12px;
+    background:rgba(255,255,255,.02);
+    border:1px solid var(--border-subtle);
+    border-radius:var(--r-lg);
+    color:inherit;font:inherit;cursor:pointer;
+    transition:background .16s var(--ease),border-color .16s var(--ease),transform .16s var(--ease);
+    -webkit-appearance:none;appearance:none;
+  }
+  .app:hover{background:rgba(255,255,255,.05);border-color:var(--border);transform:translateX(2px)}
+  .app:active{transform:translateX(1px) scale(.995)}
+  .app:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent-hi);border-color:transparent}
+
+  .ico{
+    width:42px;height:42px;flex:none;
+    border-radius:11px;
+    background:var(--surface);
+    border:1px solid var(--border-hair);
+    display:grid;place-items:center;
+    font-size:21px;line-height:1;
+  }
+
+  .meta{flex:1;min-width:0}
+  .name{display:block;font-size:14.5px;font-weight:500;letter-spacing:-.017em;color:var(--text)}
+  .desc{
+    display:block;font-size:12.5px;color:#9aa1ab;line-height:1.45;margin-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+
+  .chev{
+    flex:none;color:var(--faint);font-size:17px;line-height:1;
+    transition:color .16s var(--ease),transform .16s var(--ease);
+  }
+  .app:hover .chev{color:var(--accent-hi);transform:translateX(1px)}
+
+  /* ---------- empty / footer ---------- */
+  .empty{
+    padding:44px 16px;text-align:center;
+    border:1px dashed var(--border-subtle);border-radius:var(--r-lg);
+    color:var(--faint);font-size:12.5px;line-height:1.6;
+  }
+
+  .foot{
+    display:flex;align-items:center;gap:7px;
+    padding-top:12px;border-top:1px solid var(--border-hair);
+  }
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--faint);flex:none;transition:background .3s}
+  .dot.on{background:var(--ok)}
+  .foot span{font-size:11px;color:var(--faint)}
+
+  /* ---------- motion ---------- */
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  .app,.empty{animation:rise .34s var(--ease) both}
+  .app:nth-child(1){animation-delay:.02s}
+  .app:nth-child(2){animation-delay:.06s}
+  .app:nth-child(3){animation-delay:.10s}
+  .app:nth-child(4){animation-delay:.14s}
+  .app:nth-child(5){animation-delay:.18s}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>🎮 App Hub</h1>
-  <p class="subtitle">Chọn ứng dụng để mở trong Telegram</p>
-  <div class="status" id="status"></div>
-  <div id="app-list"></div>
-  <div class="empty" id="empty" style="display:none;">Chưa có app nào. Hãy yêu cầu tạo app mới!</div>
-  <div class="footer">Powered by GitHub Pages + Telegram Mini Apps</div>
-</div>
+<main class="shell">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div>
+        <h1>App Hub</h1>
+        <p>Telegram Mini Apps</p>
+      </div>
+    </div>
+    <div class="you" id="you" hidden></div>
+  </header>
+
+  <div class="label-row">
+    <span class="overline">Ứng dụng</span>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="apps" id="app-list"></div>
+
+  <div class="empty" id="empty" hidden>
+    Chưa có ứng dụng nào.<br>Hãy yêu cầu tạo app mới — nó sẽ tự xuất hiện ở đây.
+  </div>
+
+  <footer class="foot">
+    <span class="dot" id="dot"></span>
+    <span id="status">Đang khởi động…</span>
+  </footer>
+
+</main>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="shared/games-hub.js"></script>
 <script>
-// ===== CẤU HÌNH =====
-// Thay bằng username bot của bạn (không có @)
-const BOT_USERNAME = 'dk_doko_bot';
-
-// ===== DANH SÁCH APP =====
-// Khi thêm app mới, thêm entry vào đây
+/* ============================================================
+ * App Hub — launcher cho Telegram Mini Apps
+ * Thêm app mới: thêm 1 entry vào APPS bên dưới.
+ *   path  — đường dẫn tương đối, mở ngay trong webview (không cần BotFather)
+ *   url   — URL tuyệt đối, chỉ dùng làm fallback ngoài Telegram
+ * ============================================================ */
 const APPS = [
   {
     id: 'poly-farm',
     name: 'Poly Farm',
     icon: '🌾',
-    desc: 'Game nông trại 2D low-poly: trồng cây, thu hoạch, chăm sóc động vật',
-    shortName: 'polyfarm',
+    desc: 'Nông trại 2D low-poly: trồng cây, thu hoạch, chăn nuôi',
+    path: 'poly-farm/',
     url: 'https://hdkhoa1302.github.io/poly-farm/poly-farm/'
   },
   {
     id: '2048',
     name: '2048',
     icon: '🔢',
-    desc: 'Game xếp số kinh điển: vuốt để ghép ô, đạt 2048 để thắng',
-    shortName: 'game2048',
+    desc: 'Ghép ô cùng số, đạt 2048 để thắng — có bảng xếp hạng',
+    path: '2048/',
     url: 'https://hdkhoa1302.github.io/poly-farm/2048/'
+  },
+  {
+    id: 'dinh-lang-3d',
+    name: 'Dẹp Loạn Đình Làng 3D',
+    icon: '🏯',
+    desc: 'Platformer 3D: đạp đầu tham quan, ăn nấm, chui cống lấy sớ vàng',
+    path: 'dinh-lang-3d/',
+    url: 'https://hdkhoa1302.github.io/poly-farm/dinh-lang-3d/'
   }
-  // Thêm app mới ở đây:
   // {
   //   id: 'tetris',
   //   name: 'Tetris',
   //   icon: '🧱',
-  //   desc: 'Game xếp hình cổ điển',
-  //   shortName: 'tetris',
+  //   desc: 'Xếp hình cổ điển',
+  //   path: 'tetris/',
   //   url: 'https://hdkhoa1302.github.io/poly-farm/tetris/'
   // }
 ];
 
-// ===== RENDER =====
+/* ---------- Telegram context ---------- */
 const tg = window.Telegram?.WebApp;
-if (tg) {
+/* telegram-web-app.js luôn tạo window.Telegram, kể cả ngoài Telegram.
+   Phân biệt thật bằng platform (ngoài Telegram = 'unknown'). */
+const inTg = !!(tg && tg.platform && tg.platform !== 'unknown');
+if (inTg) {
   tg.ready();
   tg.expand();
-  document.getElementById('status').textContent = '✅ Đang chạy trong Telegram';
-} else {
-  document.getElementById('status').textContent = '🌐 Đang chạy trên trình duyệt';
+  try { tg.setHeaderColor('#08090a'); tg.setBackgroundColor('#08090a'); } catch (e) {}
 }
 
+/* ---------- player chip ---------- */
+(function renderYou() {
+  const el = document.getElementById('you');
+  if (!inTg || !window.GamesHub) return;
+  const p = GamesHub.player();
+  if (!p || !p.name) return;
+  el.hidden = false;
+  const avatar = p.photo
+    ? `<img src="${p.photo}" alt="">`
+    : `<span class="pip">${p.name.trim().charAt(0).toUpperCase()}</span>`;
+  el.innerHTML = `${avatar}<span></span>`;
+  el.querySelector('span:last-child').textContent = p.name;
+})();
+
+/* ---------- render apps ---------- */
 const list = document.getElementById('app-list');
 const empty = document.getElementById('empty');
+document.getElementById('count').textContent = String(APPS.length).padStart(2, '0');
 
-if (APPS.length === 0) {
-  empty.style.display = 'block';
+if (!APPS.length) {
+  empty.hidden = false;
+  empty.style.animation = 'none';
 } else {
   APPS.forEach(app => {
-    const card = document.createElement('div');
-    card.className = 'app-card';
-    card.innerHTML = `
-      <div class="app-icon">${app.icon}</div>
-      <div class="app-info">
-        <div class="app-name">${app.name}</div>
-        <div class="app-desc">${app.desc}</div>
-      </div>
-      <button class="play-btn" data-id="${app.id}">▶ Chơi</button>
-    `;
-    list.appendChild(card);
-  });
-
-  list.querySelectorAll('.play-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const app = APPS.find(a => a.id === btn.dataset.id);
-      openApp(app);
-    });
+    const btn = document.createElement('button');
+    btn.className = 'app';
+    btn.type = 'button';
+    btn.dataset.id = app.id;
+    btn.innerHTML =
+      `<span class="ico">${app.icon}</span>` +
+      `<span class="meta"><span class="name"></span><span class="desc"></span></span>` +
+      `<span class="chev">›</span>`;
+    btn.querySelector('.name').textContent = app.name;
+    btn.querySelector('.desc').textContent = app.desc;
+    btn.addEventListener('click', () => openApp(app));
+    list.appendChild(btn);
   });
 }
 
 function openApp(app) {
-  if (BOT_USERNAME === 'YOUR_BOT_USERNAME') {
-    // Chưa cấu hình bot → mở URL trực tiếp
-    if (tg) tg.openLink(app.url);
-    else window.open(app.url, '_blank');
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
+  // Mở trong cùng webview — KHÔNG cần đăng ký Web App trong BotFather
+  if (app.path) {
+    window.location.href = new URL(app.path, location.href).href;
     return;
   }
-  const miniAppUrl = `https://t.me/${BOT_USERNAME}/${app.shortName}`;
-  if (tg) {
-    tg.openTelegramLink(miniAppUrl);
-  } else {
-    window.open(miniAppUrl, '_blank');
-  }
+  if (inTg) tg.openLink(app.url);
+  else window.open(app.url, '_blank');
+}
+
+/* ---------- status ---------- */
+const dot = document.getElementById('dot');
+const status = document.getElementById('status');
+if (inTg) {
+  dot.classList.add('on');
+  status.textContent = 'Đang chạy trong Telegram';
+} else {
+  status.textContent = 'Đang chạy trên trình duyệt';
 }
 </script>
 </body>
