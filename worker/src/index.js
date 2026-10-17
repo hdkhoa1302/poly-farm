@@ -27,6 +27,8 @@
  *   GET  /world                  -> cả thế giới (công khai: ai cũng xem được)
  *   POST /world/join             (body initData, x?, z?) -> ghi danh + nhịp sống + vị trí
  *   POST /world/block            (body initData + x,y,z + t|null) -> xây/xoá 1 khối
+ *   POST /world/blocks           (body initData + blocks[] + obj?) -> xây 1 VẬT THỂ
+ *   POST /world/move             (body initData + take[] + put[])  -> DI DỜI vật thể
  *   GET  /world/chat             (initData, since?)  -> tin nhắn trong game
  *   POST /world/chat             (body initData + text) -> gửi tin
  *   GET  /world/live             -> BẢN NHẸ: vị trí mọi người + số hiệu khối,
@@ -50,7 +52,7 @@ const MIN_MANUAL_MSGS = 3;       // dưới mức này coi như chưa có gì đ
 const PLOT = 8;                  // lô đất mỗi cạnh bao nhiêu ô
 const PLOT_COLS = 6;             // mấy lô trên một hàng
 const MAX_Y = 12;                // xây cao tối đa
-const MAX_BLOCKS = 250;          // trần số khối mỗi người
+const MAX_BLOCKS = 600;          // trần số khối mỗi người
 const SLEEP_SEC = 120;           // quá 2 phút không thấy nhịp sống = đang ngủ
 const BLOCK_TYPES = ['grass', 'dirt', 'stone', 'wood', 'brick', 'sand', 'leaf', 'glass'];
 
@@ -115,6 +117,8 @@ async function route(request, url, env) {
   if (p === '/world/chat' && request.method === 'POST') return worldChatSend(request, env);
   if (p === '/world/join' && request.method === 'POST') return worldJoin(request, env);
   if (p === '/world/block' && request.method === 'POST') return worldBlock(request, env);
+  if (p === '/world/blocks' && request.method === 'POST') return worldBlocks(request, env);
+  if (p === '/world/move' && request.method === 'POST') return worldMove(request, env);
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -473,6 +477,37 @@ async function restoreApp(request, env) {
 
 /* ------------------------------------------------- Thế Giới Của Ae */
 /** Gốc lô đất thứ `plot` trong lưới. PHẢI khớp với app. */
+/**
+ * Biên cả thế giới. Xây tự do nên KHÔNG còn giới hạn theo lô của mình — chỉ
+ * cần nằm trong thế giới, đúng số tầng, và mỗi ô chỉ chứa MỘT khối của MỘT người
+ * (khoá chính là user+x+y+z nên nếu không chặn thì 2 người cùng ô sẽ đè nhau).
+ */
+async function worldBounds(env) {
+  const c = await env.DB.prepare('SELECT COUNT(*) AS c FROM world_members').first();
+  const rows = Math.max(3, Math.ceil(((c ? c.c : 1) || 1) / PLOT_COLS));   // khớp app: tối thiểu 3 hàng
+  return { wx: PLOT_COLS * PLOT, wz: rows * PLOT };
+}
+
+function checkCell(cell, b) {
+  const { x, y, z } = cell;
+  if (![x, y, z].every(Number.isFinite)) return 'bad-coords';
+  if (x < 0 || x >= b.wx || z < 0 || z >= b.wz) return 'outside-world';
+  if (y < 0 || y > MAX_Y) return 'too-high';
+  return null;
+}
+
+async function whoOwns(env, x, y, z) {
+  const r = await env.DB.prepare(
+    'SELECT user_id FROM world_blocks WHERE x = ? AND y = ? AND z = ?').bind(x, y, z).first();
+  return r ? r.user_id : null;
+}
+
+async function myBlockCount(env, uid) {
+  const c = await env.DB.prepare(
+    'SELECT COUNT(*) AS c FROM world_blocks WHERE user_id = ?').bind(uid).first();
+  return c ? c.c : 0;
+}
+
 function plotOrigin(plot) {
   const col = ((plot % PLOT_COLS) + PLOT_COLS) % PLOT_COLS;
   const row = Math.floor(plot / PLOT_COLS);
@@ -487,12 +522,12 @@ async function worldState(env) {
        FROM world_members ORDER BY plot`
   ).all();
   const blk = await env.DB.prepare(
-    `SELECT user_id,x,y,z,t FROM world_blocks ORDER BY user_id, y, z, x LIMIT 8000`
+    `SELECT user_id,x,y,z,t,obj FROM world_blocks ORDER BY user_id, y, z, x LIMIT 8000`
   ).all();
 
   const byUser = {};
   for (const b of blk.results || []) {
-    (byUser[b.user_id] = byUser[b.user_id] || []).push({ x: b.x, y: b.y, z: b.z, t: b.t });
+    (byUser[b.user_id] = byUser[b.user_id] || []).push({ x: b.x, y: b.y, z: b.z, t: b.t, obj: b.obj || 0 });
   }
   return json({
     ok: true,
@@ -679,6 +714,140 @@ async function worldChatSend(request, env) {
 }
 
 /**
+ * Xây cả một VẬT THỂ trong một lần gọi (một prompt có thể ra cả trăm khối; gọi
+ * từng khối thì vừa chậm vừa dễ hỏng giữa chừng). Toàn bộ cùng một `obj`.
+ */
+async function worldBlocks(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+  const uid = v.user.id;
+
+  const m = await env.DB.prepare('SELECT user_id FROM world_members WHERE user_id = ?').bind(uid).first();
+  if (!m) return json({ error: 'not-joined' }, 403);
+
+  const list = Array.isArray(b.blocks) ? b.blocks : [];
+  if (!list.length) return json({ error: 'empty' }, 400);
+  if (list.length > 400) return json({ error: 'too-many', limit: 400 }, 400);
+
+  const bd = await worldBounds(env);
+  const cells = [];
+  const seen = new Set();
+  for (const raw of list) {
+    const cell = {
+      x: Math.floor(Number(raw.x)), y: Math.floor(Number(raw.y)), z: Math.floor(Number(raw.z)),
+      t: String(raw.t || 'grass').slice(0, 16),
+    };
+    if (!BLOCK_TYPES.includes(cell.t)) return json({ error: 'bad-type', t: cell.t }, 400);
+    const bad = checkCell(cell, bd);
+    if (bad) return json({ error: bad }, 403);
+    const k = cell.x + ',' + cell.y + ',' + cell.z;
+    if (seen.has(k)) continue;                        // bỏ ô trùng trong cùng lời gọi
+    seen.add(k);
+    cells.push(cell);
+  }
+
+  // ô nào đã có khối của NGƯỜI KHÁC thì bỏ qua (không ghi đè, không phá)
+  const mine = await env.DB.prepare(
+    'SELECT x,y,z FROM world_blocks WHERE user_id = ?').bind(uid).all();
+  const mineKeys = new Set((mine.results || []).map((r) => r.x + ',' + r.y + ',' + r.z));
+
+  let added = 0;
+  const keep = [];
+  for (const c of cells) {
+    const k = c.x + ',' + c.y + ',' + c.z;
+    if (mineKeys.has(k)) { keep.push(c); continue; }
+    const owner = await whoOwns(env, c.x, c.y, c.z);
+    if (owner != null) continue;                      // của người khác → bỏ ô đó
+    keep.push(c);
+    added++;
+  }
+  if (!keep.length) return json({ error: 'no-room' }, 409);
+
+  const have = await myBlockCount(env, uid);
+  if (have + added > MAX_BLOCKS) {
+    return json({ error: 'block-limit', limit: MAX_BLOCKS, have, need: added }, 429);
+  }
+
+  const obj = Math.floor(Math.random() * 2000000000) + 1;
+  const now = Math.floor(Date.now() / 1000);
+  const stmt = env.DB.prepare(
+    `INSERT INTO world_blocks (user_id,x,y,z,t,at,obj) VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT (user_id,x,y,z) DO UPDATE SET t = excluded.t, at = excluded.at, obj = excluded.obj`
+  );
+  await env.DB.batch(keep.map((c) => stmt.bind(uid, c.x, c.y, c.z, c.t, now, obj)));
+
+  return json({ ok: true, obj, added, skipped: cells.length - added, have: have + added,
+                blocks: keep.map((c) => ({ x: c.x, y: c.y, z: c.z, t: c.t })) });
+}
+
+/**
+ * DI DỜI: bỏ các khối trong `take` (phải là của mình) rồi đặt các khối trong
+ * `put` xuống chỗ mới — một lần gọi, nên không có cảnh nửa nọ nửa kia.
+ */
+async function worldMove(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+  const uid = v.user.id;
+
+  const nm = await env.DB.prepare('SELECT user_id FROM world_members WHERE user_id = ?').bind(uid).first();
+  if (!nm) return json({ error: 'not-joined' }, 403);
+
+  const take = Array.isArray(b.take) ? b.take : [];
+  const put = Array.isArray(b.put) ? b.put : [];
+  if (!take.length) return json({ error: 'empty' }, 400);
+
+  const bd = await worldBounds(env);
+
+  // 1. tất cả khối bị nhấc phải là CỦA MÌNH
+  for (const raw of take) {
+    const x = Math.floor(Number(raw.x)), y = Math.floor(Number(raw.y)), z = Math.floor(Number(raw.z));
+    if (![x, y, z].every(Number.isFinite)) return json({ error: 'bad-coords' }, 400);
+    const owner = await whoOwns(env, x, y, z);
+    if (owner !== uid) return json({ error: 'not-yours' }, 403);
+  }
+
+  // 2. chỗ mới phải hợp lệ và không đè lên khối người khác
+  const takenKeys = new Set(take.map((c) => Math.floor(Number(c.x)) + ',' + Math.floor(Number(c.y)) + ',' + Math.floor(Number(c.z))));
+  const cells = [];
+  for (const raw of put) {
+    const cell = {
+      x: Math.floor(Number(raw.x)), y: Math.floor(Number(raw.y)), z: Math.floor(Number(raw.z)),
+      t: String(raw.t || 'grass').slice(0, 16),
+      obj: Math.floor(Number(raw.obj || 0)) || 0,
+    };
+    if (!BLOCK_TYPES.includes(cell.t)) return json({ error: 'bad-type' }, 400);
+    const bad = checkCell(cell, bd);
+    if (bad) return json({ error: bad }, 403);
+    const k = cell.x + ',' + cell.y + ',' + cell.z;
+    if (takenKeys.has(k)) continue;                   // chỗ cũ của chính nó thì bỏ qua
+    const owner = await whoOwns(env, cell.x, cell.y, cell.z);
+    if (owner != null && owner !== uid) return json({ error: 'occupied', at: k }, 409);
+    cells.push(cell);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const stmtDel = env.DB.prepare(
+    'DELETE FROM world_blocks WHERE user_id = ? AND x = ? AND y = ? AND z = ?');
+  const stmtIns = env.DB.prepare(
+    `INSERT INTO world_blocks (user_id,x,y,z,t,at,obj) VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT (user_id,x,y,z) DO UPDATE SET t = excluded.t, at = excluded.at, obj = excluded.obj`);
+
+  const batch = take.map((c) => stmtDel.bind(
+    uid, Math.floor(Number(c.x)), Math.floor(Number(c.y)), Math.floor(Number(c.z))));
+  for (const c of cells) batch.push(stmtIns.bind(uid, c.x, c.y, c.z, c.t, now, c.obj));
+  await env.DB.batch(batch);
+
+  return json({ ok: true, moved: take.length, placed: cells.length,
+                blocks: cells.map((c) => ({ x: c.x, y: c.y, z: c.z, t: c.t, obj: c.obj })) });
+}
+
+/**
  * Xây / xoá một khối. CHỈ trong lô của mình — kiểm ở server, không tin app.
  * t = null  → xoá khối;  t = loại khối → đặt.
  */
@@ -696,10 +865,9 @@ async function worldBlock(request, env) {
   const x = Math.floor(Number(b.x)), y = Math.floor(Number(b.y)), z = Math.floor(Number(b.z));
   if (![x, y, z].every(Number.isFinite)) return json({ error: 'bad coords' }, 400);
 
-  const { ox, oz } = plotOrigin(m.plot);
-  if (x < ox || x >= ox + PLOT || z < oz || z >= oz + PLOT || y < 0 || y > MAX_Y) {
-    return json({ error: 'outside-plot' }, 403);
-  }
+  const bd = await worldBounds(env);
+  const bad = checkCell({ x, y, z }, bd);
+  if (bad) return json({ error: bad }, 403);
 
   const now = Math.floor(Date.now() / 1000);
 
@@ -713,12 +881,12 @@ async function worldBlock(request, env) {
   const t = String(b.t).slice(0, 16);
   if (!BLOCK_TYPES.includes(t)) return json({ error: 'bad type' }, 400);
 
-  const c = await env.DB.prepare('SELECT COUNT(*) AS c FROM world_blocks WHERE user_id = ?').bind(uid).first();
-  const have = c ? c.c : 0;
-  const isUpdate = await env.DB.prepare(
-    'SELECT 1 FROM world_blocks WHERE user_id = ? AND x = ? AND y = ? AND z = ?'
-  ).bind(uid, x, y, z).first();
-  if (!isUpdate && have >= MAX_BLOCKS) {
+  const owner = await whoOwns(env, x, y, z);
+  if (owner != null && owner !== uid) return json({ error: 'occupied' }, 409);
+
+  const have = await myBlockCount(env, uid);
+  const replacing = owner === uid;                 // ô này vốn đã là khối của mình
+  if (!replacing && have >= MAX_BLOCKS) {
     return json({ error: 'block-limit', limit: MAX_BLOCKS, have }, 429);
   }
 
@@ -727,5 +895,5 @@ async function worldBlock(request, env) {
      ON CONFLICT(user_id,x,y,z) DO UPDATE SET t = excluded.t, at = excluded.at`
   ).bind(uid, x, y, z, t, now).run();
 
-  return json({ ok: true, placed: true, blocks: isUpdate ? have : have + 1 });
+  return json({ ok: true, placed: true, blocks: replacing ? have : have + 1, obj: 0 });
 }

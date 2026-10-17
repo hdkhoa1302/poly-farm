@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS world_blocks (
 
 CREATE INDEX IF NOT EXISTS idx_world_blocks_user ON world_blocks (user_id);
 
+-- khối nào thuộc cùng một vật thể (do một prompt tạo ra) thì cùng số obj
+-- (đã thêm bằng ALTER TABLE; ghi ở đây cho ai dựng lại từ đầu)
+-- obj INTEGER NOT NULL DEFAULT 0
+
 CREATE TABLE IF NOT EXISTS world_chat (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,

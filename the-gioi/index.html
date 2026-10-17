@@ -113,6 +113,30 @@
     border:1px solid var(--line);background:rgba(58,120,220,.32);color:var(--ink)}
   .chatSend:disabled{opacity:.45}
 
+  /* thanh đang nhấc vật thể */
+  .carry{position:fixed;left:12px;right:12px;bottom:calc(100px + env(safe-area-inset-bottom));
+    display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:13px;z-index:9;
+    border:1px solid var(--line);background:rgba(10,15,24,.95);backdrop-filter:blur(10px)}
+  .carry span{flex:1;min-width:0;font-size:12.5px;color:var(--muted)}
+  .carry span b{color:var(--ink)}
+  .carry button{padding:8px 12px;border-radius:10px;border:1px solid var(--line);
+    background:rgba(58,120,220,.32);color:var(--ink);font:inherit;font-size:12.5px;font-weight:600}
+  .carry button.cancel{background:rgba(255,255,255,.06);font-weight:400}
+
+  /* bảng tạo vật thể */
+  .buildBody{padding:12px 14px 14px;display:flex;flex-direction:column;gap:9px}
+  .buildHint{font-size:12px;color:var(--muted);line-height:1.5;min-height:32px}
+  .buildHint b{color:var(--ink)}
+  .buildHint.bad{color:#f0a6a2}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:5px 10px;border-radius:999px;border:1px solid var(--line);
+    background:rgba(30,42,64,.55);color:var(--muted);font:inherit;font-size:11.5px}
+  .chip:active{transform:scale(.95)}
+  .goWide{padding:11px;border-radius:11px;border:1px solid var(--line);
+    background:rgba(58,120,220,.34);color:var(--ink);font:inherit;font-size:14px;font-weight:600;
+    display:flex;align-items:center;justify-content:center;gap:8px}
+  .goWide:disabled{opacity:.45}
+
   /* hướng dẫn lần đầu */
   .guide{position:fixed;inset:0;display:grid;place-items:center;background:rgba(8,12,20,.85);z-index:22;padding:22px}
   .guide .box{max-width:330px;width:100%}
@@ -154,6 +178,7 @@
 <div class="tools">
   <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
   <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
+  <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
   <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
 </div>
 
@@ -185,6 +210,26 @@
   </div>
 </div>
 
+<div class="carry" id="carryBar" hidden>
+  <span id="carryText">Đang nhấc <b>0</b> khối</span>
+  <button id="carryDrop">Đặt xuống</button>
+  <button class="cancel" id="carryCancel">Huỷ</button>
+</div>
+
+<div class="chat" id="buildPanel">
+  <div class="head">
+    <b>Tạo vật thể bằng mô tả</b>
+    <button class="iconbtn" id="buildClose"><span id="buildCloseIcon"></span></button>
+  </div>
+  <div class="buildBody">
+    <input class="chatIn" id="buildIn" type="text" maxlength="120"
+           placeholder="Ví dụ: nhà 2 tầng bằng gỗ" autocomplete="off" enterkeyhint="go">
+    <div class="buildHint" id="buildHint"></div>
+    <div class="chips" id="buildChips"></div>
+    <button class="goWide" id="buildGo"><span id="buildGoIcon"></span><span id="buildGoText">Tạo</span></button>
+  </div>
+</div>
+
 <div class="guide" id="guide" hidden><div class="box">
   <h2>Đi lại &amp; xây trong thế giới</h2>
   <ul>
@@ -193,6 +238,8 @@
     <li><span class="gIcon" id="g3"></span><span><b>Kéo trên nền</b> để xoay nhìn, chụm 2 ngón để thu phóng.</span></li>
     <li><span class="gIcon" id="g4"></span><span><b>Chạm vào đất</b> trong lô mình để xây. Chọn <b>Tẩy</b> rồi chạm để xoá.</span></li>
     <li><span class="gIcon" id="g5"></span><span><b>Nút chat</b> góc phải trên để nói chuyện với mọi người.</span></li>
+    <li><span class="gIcon" id="g6"></span><span><b>Nút lấp lánh</b> cạnh nút chat: gõ mô tả để dựng cả một vật thể — <b>nhà 2 tầng bằng gỗ</b>, <b>cây to</b>, <b>tháp cao 8</b>, <b>trái tim</b>…</span></li>
+    <li><span class="gIcon" id="g7"></span><span><b>Chạm giữ</b> một khối của mình để nhấc lên và đặt lại chỗ khác.</span></li>
   </ul>
   <button id="guideOk">Đã hiểu</button>
 </div></div>
@@ -225,7 +272,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const API = 'https://games-hub-api.hdkhoa1302.workers.dev';
 
 /* phải khớp worker/src/index.js */
-const PLOT = 8, COLS = 6, MAX_Y = 12, MAX_BLOCKS = 250, SLEEP_SEC = 120;
+const PLOT = 8, COLS = 6, MAX_Y = 12, MAX_BLOCKS = 600, SLEEP_SEC = 120;
 
 const BLOCKS = [
   { id:'grass', name:'Cỏ',   top:0x6cc24a, side:0x8a6a44 },
@@ -265,6 +312,8 @@ const ICONS = {
   'close':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'send':'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   'chevron':'<path d="m6 9 6 6 6-6"/>',
+  'sparkles':'<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+  'hand':'<path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8v-1a2 2 0 1 1 4 0"/>',
   'move':'<path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3"/><path d="m9 19 3 3 3-3"/><path d="m5 9-3 3 3 3"/><path d="m19 9 3 3-3 3"/>',
   'rotate':'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
   'box':'<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
@@ -284,7 +333,12 @@ $('g2').innerHTML = svg('jump', 16);
 $('g3').innerHTML = svg('rotate', 16);
 $('g4').innerHTML = svg('box', 16);
 $('g5').innerHTML = svg('chat', 16);
+$('g6').innerHTML = svg('sparkles', 16);
+$('g7').innerHTML = svg('hand', 16);
 $('toolChev').innerHTML = svg('chevron', 14);
+$('buildIcon').innerHTML = svg('sparkles', 18);
+$('buildCloseIcon').innerHTML = svg('close', 16);
+$('buildGoIcon').innerHTML = svg('sparkles', 16);
 
 /* ---------------------------------------------------------------- telegram nav */
 $('back').onclick = () => {
@@ -391,12 +445,12 @@ function bumpCol(x, z) {
 }
 const topAt = (x, z) => colTop.get(colKey(x, z)) || 0;
 
-function addBlockMesh(x, y, z, type, owner) {
+function addBlockMesh(x, y, z, type, owner, obj) {
   const mesh = new THREE.Mesh(BOX, MATS[type] || MATS.grass);
   mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  mesh.userData = { x, y, z, t: type, owner, isBlock: true };
+  mesh.userData = { x, y, z, t: type, owner, obj: obj || 0, isBlock: true };
   const edges = new THREE.LineSegments(EDGE, EDGE_MAT);
   mesh.add(edges);
   blockGroup.add(mesh);
@@ -530,10 +584,7 @@ const origin = (plot) => {
   return { ox: col * PLOT, oz: row * PLOT };
 };
 const myOrigin = () => origin(MY_PLOT < 0 ? 0 : MY_PLOT);
-const inMyPlot = (x, z) => {
-  const { ox, oz } = myOrigin();
-  return x >= ox && x < ox + PLOT && z >= oz && z < oz + PLOT;
-};
+const inWorld = (x, z) => x >= 0 && z >= 0 && x < COLS * PLOT && z < ROWS * PLOT;
 
 /* ---------------------------------------------------------------- dựng mặt đất */
 const GROUND_Y = -0.02;
@@ -595,7 +646,8 @@ function buildGround(rows) {
 /* ---------------------------------------------------------------- dựng cả thế giới */
 function renderWorld() {
   const members = (WORLD && WORLD.members) || [];
-  const rows = Math.max(2, Math.ceil(Math.max(members.length, 1) / COLS));
+  // luôn chừa tối thiểu 3 hàng: xây tự do mà thế giới chỉ đúng 1 hàng thì hết chỗ
+  const rows = Math.max(3, Math.ceil(Math.max(members.length, 1) / COLS));
   buildGround(rows);
 
   blockGroup.clear();
@@ -604,15 +656,15 @@ function renderWorld() {
   local.clear();
 
   let awake = 0;
+  myBlocks = 0;                       // đếm MỘT lần cho cả thế giới, không phải mỗi người
   for (const m of members) {
     const asleep = !!m.asleep;
     if (!asleep) awake++;
     const { ox, oz } = origin(m.plot);
 
     // khối của người này
-    myBlocks = 0;
     for (const b of (m.blocks || [])) {
-      addBlockMesh(b.x, b.y, b.z, b.t, m.id);
+      addBlockMesh(b.x, b.y, b.z, b.t, m.id, b.obj);
       if (m.id === (me()?.id)) myBlocks++;
     }
 
@@ -704,7 +756,9 @@ function updateGhost(point) {
   const hit = pick(point);
   if (!hit) { ghost.visible = false; ghostCell = null; return; }
   const c = hit.place;
-  const ok = inMyPlot(c.x, c.z) && c.y >= 0 && c.y <= MAX_Y;
+  const holder = blockMeshes.get(keyOf(c.x, c.y, c.z));
+  const free = !holder || holder.userData.owner === (me() && me().id);
+  const ok = inWorld(c.x, c.z) && c.y >= 0 && c.y <= MAX_Y && free;
   hoverCell = { c, hit, ok };
   if (mode === 'erase') {
     // hiện đúng khối trên cùng của cột sẽ bị xoá
@@ -734,17 +788,28 @@ function updateGhost(point) {
 
 /* ---------------------------------------------------------------- chạm: xây / xoá */
 let down = null;
+let holdTimer = null;
 canvas.addEventListener('pointerdown', (e) => {
   down = { x: e.clientX, y: e.clientY, t: Date.now() };
   if (palOpen) setPal(false);            // chạm ra thế giới thì thu bảng chọn lại
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => {
+    if (!down) return;
+    down.held = true;                    // đánh dấu: lần nhả này là NHẤC, không phải chạm xây
+    lift({ x: down.x, y: down.y });
+  }, 600);
 });
 canvas.addEventListener('pointermove', (e) => {
-  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;   // đang xoay
+  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) {
+    clearTimeout(holdTimer); down = null; return;                              // đang xoay
+  }
   if (e.pointerType === 'mouse') updateGhost({ x: e.clientX, y: e.clientY });
 });
 canvas.addEventListener('pointerup', (e) => {
+  clearTimeout(holdTimer);
   const d = down; down = null;
   if (!d) return;
+  if (d.held) return;                  // vừa chạm giữ để nhấc, không xây/xoá
   const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
   const quick = Date.now() - d.t < 450;
   if (moved > 10 || !quick) return;                 // là thao tác xoay/zoom, không phải chạm
@@ -770,7 +835,7 @@ async function tap(point) {
     if (!d) { toast('Ở đó không có khối nào của mình'); return; }
     removeBlockMesh(d.x, d.y, d.z);
     restack(me()?.id);
-    if (MY_PLOT >= 0 && d.x >= myOrigin().ox && d.x < myOrigin().ox + PLOT) myBlocks = Math.max(0, myBlocks - 1);
+    myBlocks = Math.max(0, myBlocks - 1);
     updateNote();
     haptic('light');
     const r = await post('/world/block', { initData: initData(), x: d.x, y: d.y, z: d.z, t: null });
@@ -779,20 +844,30 @@ async function tap(point) {
   }
 
   const c = hit.place;
-  if (!inMyPlot(c.x, c.z)) { toast('Chỉ xây được trong lô của mình'); return; }
+  if (!inWorld(c.x, c.z)) { toast('Ra ngoài thế giới rồi'); return; }
   if (c.y < 0 || c.y > MAX_Y) { toast('Cao quá rồi (tối đa ' + (MAX_Y + 1) + ' tầng)'); return; }
+  const holder = blockMeshes.get(keyOf(c.x, c.y, c.z));
+  if (holder && holder.userData.owner !== (me() && me().id)) {
+    toast('Ô đó có khối của người khác rồi'); return;
+  }
   if (myBlocks >= MAX_BLOCKS) { toast('Hết chỗ xây (' + MAX_BLOCKS + ' khối) — xoá bớt đi'); return; }
 
+  const wasMine = !!holder;
   addBlockMesh(c.x, c.y, c.z, picked, me()?.id);
   restack(me()?.id);
-  myBlocks++; updateNote();
+  if (!wasMine) myBlocks++;
+  updateNote();
   haptic('light');
   const r = await post('/world/block', { initData: initData(), x: c.x, y: c.y, z: c.z, t: picked });
   if (!r.ok) {
-    removeBlockMesh(c.x, c.y, c.z);
+    if (wasMine) addBlockMesh(c.x, c.y, c.z, holder.userData.t, me()?.id);
+    else { removeBlockMesh(c.x, c.y, c.z); myBlocks = Math.max(0, myBlocks - 1); }
     restack(me()?.id);
-    myBlocks = Math.max(0, myBlocks - 1); updateNote();
-    toast(r.body && r.body.error === 'block-limit' ? 'Hết chỗ xây — xoá bớt đi' : 'Không xây được');
+    updateNote();
+    const e = r.body && r.body.error;
+    toast(e === 'block-limit' ? 'Hết chỗ xây — xoá bớt đi'
+        : e === 'occupied' ? 'Ô đó có người chiếm rồi'
+        : e === 'outside-world' ? 'Ra ngoài thế giới rồi' : 'Không xây được');
   }
 }
 
@@ -1070,6 +1145,8 @@ function tick(now) {
     }
   }
 
+  if (carrying) updateCarryPreview();
+
   /* ---- bong bóng chat bám trên đầu ---- */
   for (const [uid, b] of bubbles) {
     const o = local.get(uid);
@@ -1165,15 +1242,507 @@ async function boot() {
   }
   // hướng dẫn lần đầu
   let seenGuide = false;
-  try { seenGuide = !!localStorage.getItem('tg_world_guide_v1'); } catch (e) {}
+  try { seenGuide = !!localStorage.getItem('tg_world_guide_v2'); } catch (e) {}
   if (!seenGuide) $('guide').hidden = false;
   $('guideOk').onclick = () => {
-    try { localStorage.setItem('tg_world_guide_v1', '1'); } catch (e) {}
+    try { localStorage.setItem('tg_world_guide_v2', '1'); } catch (e) {}
     $('guide').hidden = true;
     haptic('light');
   };
 
   requestAnimationFrame(tick);
+}
+
+/* ---------------------------------------------------------------- tạo vật thể bằng mô tả
+ * KHÔNG gọi AI: đọc mô tả bằng luật (tên hình · số tầng · vật liệu) rồi dựng
+ * bằng code. Chạy ngay, không tốn lượt gọi mạng nào.
+ */
+const MATERIALS = {
+  go: ['wood', 'Gỗ'], gach: ['brick', 'Gạch'], kinh: ['glass', 'Kính'],
+  cat: ['sand', 'Cát'], da: ['stone', 'Đá'], dat: ['dirt', 'Đất'],
+  co: ['grass', 'Cỏ'], la: ['leaf', 'Lá'],
+};
+
+/** Bỏ dấu tiếng Việt để so khớp ("Gỗ" → "go", "tầng" → "tang"). */
+const norm = (x) => String(x).toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
+  .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const clampI = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+const MAX_OBJ = 200;        // một vật thể tối đa 200 khối
+
+/** Tô một tấm chữ nhật nằm ngang. hollow = chỉ viền, rỗng ruột (đỡ tốn khối). */
+function slab(out, x0, y, z0, w, d, t, hollow) {
+  for (let x = 0; x < w; x++) {
+    for (let z = 0; z < d; z++) {
+      if (hollow && !(x === 0 || x === w - 1 || z === 0 || z === d - 1)) continue;
+      out.push([x0 + x, y, z0 + z, t]);
+    }
+  }
+}
+function box(out, x0, y0, z0, x1, y1, z1, t) {
+  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
+    for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++)
+      for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++) out.push([x, y, z, t]);
+}
+
+/* Thư viện hình. Toạ độ cục bộ: (0,0,0) là ô chân, y hướng lên.
+   Thứ tự trong mảng là thứ tự ưu tiên — "cầu thang" phải đứng trước "cầu". */
+const SHAPES = [
+  { k: ['nha', 'house'], ten: 'Nhà', def: { w: 7, d: 7, h: 3 }, mat: 'brick', roof: 'brick',
+    build: (o) => {
+      const out = [], door = Math.floor(o.w / 2);
+      for (let y = 0; y < o.h; y++)
+        for (let x = 0; x < o.w; x++)
+          for (let z = 0; z < o.d; z++) {
+            if (!(x === 0 || x === o.w - 1 || z === 0 || z === o.d - 1)) continue;
+            if (x === door && z === 0 && y < Math.min(2, o.h)) continue;      // cửa ra vào
+            out.push([x, y, z, y === 0 ? 'stone' : o.mat]);
+          }
+      const r = Math.ceil(Math.min(o.w, o.d) / 2);
+      for (let i = 0; i < r; i++) {
+        const w = o.w - 2 * i, d = o.d - 2 * i;
+        if (w <= 0 || d <= 0) break;
+        slab(out, i, o.h + i, i, w, d, o.roof, i < r - 1);
+      }
+      return out;
+    } },
+
+  { k: ['cay', 'tree'], ten: 'Cây', def: { w: 5, d: 5, h: 4 }, mat: 'wood', roof: 'leaf',
+    build: (o) => {
+      const out = [], cx = Math.floor(o.w / 2), cz = Math.floor(o.d / 2), t = Math.max(3, o.h);
+      for (let y = 0; y < t; y++) out.push([cx, y, cz, 'wood']);
+      const r = Math.max(1, Math.floor(o.w / 2));
+      for (let y = t - 2; y <= t; y++)
+        for (let x = cx - r; x <= cx + r; x++)
+          for (let z = cz - r; z <= cz + r; z++) {
+            const dd = Math.abs(x - cx) + Math.abs(z - cz) + Math.abs(y - (t - 1));
+            if (dd <= r + 1) out.push([x, y, z, o.roof]);
+          }
+      return out;
+    } },
+
+  { k: ['kim tu thap', 'pyramid'], ten: 'Kim tự tháp', def: { w: 7, d: 7, h: 4 },
+    mat: 'sand', roof: 'sand',
+    build: (o) => {
+      const out = [];
+      for (let i = 0; i < o.h; i++) {
+        const w = o.w - 2 * i, d = o.d - 2 * i;
+        if (w <= 0 || d <= 0) break;
+        slab(out, i, i, i, w, d, o.mat, false);
+      }
+      return out;
+    } },
+
+  { k: ['thap', 'tower', 'cot'], ten: 'Tháp', def: { w: 3, d: 3, h: 6 }, mat: 'stone', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      for (let y = 0; y < o.h; y++) {
+        const i = Math.floor((y / o.h) * Math.min(o.w, o.d) * 0.3);
+        const w = Math.max(1, o.w - i), d = Math.max(1, o.d - i);
+        slab(out, i, y, i, w, d, y === o.h - 1 ? o.roof : o.mat, true);
+      }
+      return out;
+    } },
+
+  { k: ['cau thang', 'bac thang', 'stairs'], ten: 'Cầu thang', def: { w: 3, d: 1, h: 6 },
+    mat: 'stone', roof: 'stone',
+    build: (o) => {
+      const out = [];
+      for (let y = 0; y < o.h; y++) box(out, 0, y, y, o.w - 1, y, y, o.mat);
+      return out;
+    } },
+
+  { k: ['cau', 'bridge'], ten: 'Cầu', def: { w: 12, d: 3, h: 1 }, mat: 'wood', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      box(out, 0, 0, 0, o.w - 1, 0, o.d - 1, o.mat);
+      for (let x = 0; x < o.w; x++) {
+        out.push([x, 1, 0, o.roof]);
+        out.push([x, 1, o.d - 1, o.roof]);
+        if (x % 3 === 0) out.push([x, 2, 0, o.roof]);
+      }
+      return out;
+    } },
+
+  { k: ['hang rao', 'rao', 'fence'], ten: 'Hàng rào', def: { w: 9, d: 1, h: 2 },
+    mat: 'wood', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      for (let x = 0; x < o.w; x++) {
+        out.push([x, 0, 0, o.mat]);
+        if (x % 3 === 0) { out.push([x, 1, 0, o.mat]); out.push([x, 2, 0, o.mat]); }
+      }
+      return out;
+    } },
+
+  { k: ['gieng', 'well'], ten: 'Giếng', def: { w: 3, d: 3, h: 3 }, mat: 'stone', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      slab(out, 0, 0, 0, o.w, o.d, o.mat, true);
+      slab(out, 0, 1, 0, o.w, o.d, o.mat, true);
+      slab(out, -1, 2, -1, o.w + 2, o.d + 2, o.roof, false);
+      return out;
+    } },
+
+  { k: ['cong', 'gate'], ten: 'Cổng', def: { w: 5, d: 1, h: 4 }, mat: 'brick', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      for (let y = 0; y < o.h; y++) { out.push([0, y, 0, o.mat]); out.push([o.w - 1, y, 0, o.mat]); }
+      box(out, 0, o.h, 0, o.w - 1, o.h, 0, o.roof);
+      return out;
+    } },
+
+  { k: ['trai tim', 'heart'], ten: 'Trái tim', def: { w: 9, d: 1, h: 8 }, mat: 'brick', roof: 'brick',
+    build: (o) => {
+      const P = [' xx  xx ', 'xxxxxxxx', 'xxxxxxxx', 'xxxxxxxx', ' xxxxxx ', '  xxxx  ', '   xx   '];
+      const out = [], sx = Math.max(1, Math.round(o.w / P[0].length));
+      for (let r = 0; r < P.length; r++)
+        for (let c = 0; c < P[r].length; c++)
+          if (P[r][c] === 'x') box(out, c * sx, (P.length - 1 - r) * sx, 0, c * sx + sx - 1, (P.length - 1 - r) * sx + sx - 1, o.d - 1, o.mat);
+      return out;
+    } },
+
+  { k: ['tuong nguoi', 'nguoi', 'statue', 'robot'], ten: 'Tượng người', def: { w: 3, d: 2, h: 5 },
+    mat: 'stone', roof: 'stone',
+    build: (o) => {
+      const out = [], cx = Math.floor(o.w / 2), h = Math.max(4, o.h);
+      for (let y = 0; y < Math.floor(h / 2); y++) { out.push([cx - 1, y, 0, o.mat]); out.push([cx + 1, y, 0, o.mat]); }
+      box(out, cx - 1, Math.floor(h / 2), 0, cx + 1, h - 1, 0, o.mat);
+      for (let x = cx - 1; x <= cx + 1; x++) out.push([x, h, 0, o.roof]);
+      return out;
+    } },
+
+  { k: ['tuong', 'wall', 'thanh'], ten: 'Tường', def: { w: 8, d: 1, h: 3 }, mat: 'brick', roof: 'stone',
+    build: (o) => {
+      const out = [];
+      for (let y = 0; y < o.h; y++) box(out, 0, y, 0, o.w - 1, y, 0, y === o.h - 1 ? o.roof : o.mat);
+      return out;
+    } },
+
+  { k: ['ghe', 'chair'], ten: 'Ghế', def: { w: 2, d: 2, h: 2 }, mat: 'wood', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      slab(out, 0, 0, 0, o.w, o.d, o.mat, false);
+      for (let y = 1; y <= o.h; y++) box(out, 0, y, o.d - 1, o.w - 1, y, o.d - 1, o.mat);
+      return out;
+    } },
+
+  { k: ['cai ban'], ten: 'Bàn', def: { w: 3, d: 2, h: 2 }, mat: 'wood', roof: 'wood',
+    build: (o) => {
+      const out = [];
+      slab(out, 0, o.h - 1, 0, o.w, o.d, o.mat, false);
+      for (let x = 0; x < o.w; x += o.w - 1)
+        for (let z = 0; z < o.d; z += Math.max(1, o.d - 1))
+          for (let y = 0; y < o.h - 1; y++) out.push([x, y, z, o.roof]);
+      return out;
+    } },
+];
+
+/** Đọc mô tả → hình + kích thước + vật liệu. Không hiểu thì trả về lý do. */
+function parsePrompt(raw) {
+  const t = norm(raw);
+  if (!t) return { ok: false, why: 'Chưa có gì để đọc' };
+
+  const spec = { h: null, w: null, scale: 1, mat: null, matName: null, shape: null };
+  let m = t.match(/(\d+)\s*tang/) || t.match(/cao\s*(\d+)/);
+  if (m) spec.h = clampI(+m[1], 1, MAX_Y + 1);
+  m = t.match(/(?:rong|dai|ngang)\s*(\d+)/);
+  if (m) spec.w = clampI(+m[1], 1, 24);
+  if (/(^|\s)(to|lon|khung)(\s|$)/.test(t)) spec.scale = 1.5;
+  if (/(^|\s)(nho|be|ti)(\s|$)/.test(t)) spec.scale = 0.7;
+
+  let mk = (t.match(/bang\s+([a-z]+)/) || [])[1] || null;
+  if (!mk) mk = ['gach', 'kinh', 'cat', 'go'].find((k) => new RegExp('(^|\\s)' + k + '(\\s|$)').test(t)) || null;
+  if (mk && MATERIALS[mk]) { spec.mat = MATERIALS[mk][0]; spec.matName = MATERIALS[mk][1]; }
+
+  for (const sh of SHAPES) if (sh.k.some((k) => t.includes(k))) { spec.shape = sh; break; }
+  if (!spec.shape) return { ok: false, why: 'Chưa nhận ra hình nào', spec };
+  return { ok: true, spec };
+}
+
+/** Dựng danh sách khối từ thông số đã đọc. */
+function buildFromSpec(spec) {
+  const sh = spec.shape;
+  const o = {
+    w: clampI(spec.w || sh.def.w, 1, 24),
+    d: clampI(sh.def.d, 1, 24),
+    h: clampI(spec.h || sh.def.h, 1, MAX_Y + 1),
+    mat: spec.mat || sh.mat,
+    roof: spec.mat || sh.roof,
+  };
+  if (spec.scale !== 1) {
+    o.w = clampI(o.w * spec.scale, 1, 24);
+    o.d = clampI(o.d * spec.scale, 1, 24);
+    if (!spec.h) o.h = clampI(o.h * spec.scale, 1, MAX_Y + 1);
+  }
+  const seen = new Set(), cells = [];
+  for (const c of sh.build(o)) {
+    const k = c[0] + ',' + c[1] + ',' + c[2];
+    if (seen.has(k)) continue;
+    seen.add(k);
+    cells.push(c);
+    if (cells.length > MAX_OBJ) break;        // vật thể to quá thì cắt bớt
+  }
+  return { cells, o, cut: cells.length > MAX_OBJ };
+}
+
+/* ---------------------------------------------------------------- nhấc & đặt lại vật thể
+ * Chạm GIỮ một khối của mình: nếu khối đó thuộc một vật thể (có obj) thì nhấc cả
+ * vật thể, không thì nhấc một khối. Vật thể đang nhấc hiện mờ trước mặt; bấm
+ * "Đặt xuống" là chốt — cả việc bỏ chỗ cũ lẫn đặt chỗ mới nằm trong MỘT lần gọi
+ * nên không có cảnh nửa nọ nửa kia.
+ */
+const carryGroup = new THREE.Group();
+scene.add(carryGroup);
+let carrying = null;                       // { cells, obj }
+const carryBar = $('carryBar');
+
+/** Khối (hoặc cả vật thể) sẽ bị nhấc khi chạm giữ vào `point`. */
+function blockSetAt(point) {
+  const hit = pick(point);
+  if (!hit || !hit.onBlock) return { why: 'none' };
+  const d = hit.block;
+  if (d.owner !== (me() && me().id)) return { why: 'not-mine' };
+  if (d.obj) {
+    const out = [];
+    for (const [, m] of blockMeshes) {
+      const u = m.userData;
+      if (u.owner === d.owner && u.obj === d.obj) out.push({ x: u.x, y: u.y, z: u.z, t: u.t, obj: u.obj });
+    }
+    return { cells: out };
+  }
+  return { cells: [{ x: d.x, y: d.y, z: d.z, t: d.t, obj: 0 }] };
+}
+
+/** Chỗ sẽ đặt: trước mặt nhân vật, kéo vào trong thế giới nếu vượt biên. */
+function carryTarget() {
+  const cs = carrying.cells;
+  const minx = Math.min(...cs.map((c) => c.x)), minz = Math.min(...cs.map((c) => c.z));
+  const miny = Math.min(...cs.map((c) => c.y));
+  const w = Math.max(...cs.map((c) => c.x)) - minx + 1;
+  const d = Math.max(...cs.map((c) => c.z)) - minz + 1;
+  const WX = COLS * PLOT, WZ = ROWS * PLOT;
+  const fx = Math.sin(player.yaw || 0), fz = Math.cos(player.yaw || 0);
+  const tx = Math.floor(player.x) + Math.round(fx * 4);
+  const tz = Math.floor(player.z) + Math.round(fz * 4);
+  const ax = clampI(tx - Math.floor(w / 2), 0, Math.max(0, WX - w));
+  const az = clampI(tz - Math.floor(d / 2), 0, Math.max(0, WZ - d));
+  const baseY = topAt(clampI(tx, 0, WX - 1), clampI(tz, 0, WZ - 1));
+  return cs.map((c) => ({ x: ax + (c.x - minx), y: baseY + (c.y - miny), z: az + (c.z - minz), t: c.t, obj: c.obj || 0 }));
+}
+
+/** Chỗ sắp đặt có hợp lệ không? Trả lý do, hoặc null nếu đặt được. */
+function carryValid(cells) {
+  const WX = COLS * PLOT, WZ = ROWS * PLOT, myId = me() && me().id;
+  for (const c of cells) {
+    if (c.y < 0 || c.y > MAX_Y) return 'Cao quá rồi — đứng chỗ thấp hơn';
+    if (c.x < 0 || c.z < 0 || c.x >= WX || c.z >= WZ) return 'Ra ngoài thế giới';
+    const h = blockMeshes.get(keyOf(c.x, c.y, c.z));
+    if (h && h.userData.owner !== myId) return 'Chỗ đó có khối của người khác';
+  }
+  return null;
+}
+
+function clearCarryMeshes() {
+  carryGroup.clear();
+}
+
+function updateCarryPreview() {
+  if (!carrying) return;
+  const put = carryTarget();
+  const why = carryValid(put);
+  carryGroup.children.forEach((m, i) => {
+    const p = put[i];
+    if (p) {
+      m.position.set(p.x + 0.5, p.y + 0.5, p.z + 0.5);
+      m.visible = p.y >= 0 && p.y <= MAX_Y;
+      m.material.color.set(why ? 0xff6b6b : 0x7fb2ff);      // đỏ = chỗ này không đặt được
+    }
+  });
+  const btn = $('carryDrop');
+  if (btn) btn.disabled = !!why;
+  const txt = $('carryText');
+  if (txt && carrying) {
+    txt.innerHTML = why
+      ? '<b>Không đặt được:</b> ' + why
+      : 'Đang nhấc <b>' + carrying.cells.length + '</b> khối'
+        + (carrying.cells.length > 1 ? ' (cả vật thể)' : '') + ' — đi tới chỗ khác nếu muốn';
+  }
+}
+
+function lift(point) {
+  if (carrying || !player.ready) return;
+  const r = blockSetAt(point);
+  if (!r.cells || !r.cells.length) {
+    toast(r.why === 'not-mine' ? 'Chỉ nhấc được khối của mình' : 'Chạm giữ vào khối của mình để nhấc lên');
+    return;
+  }
+  carrying = { cells: r.cells, obj: r.cells[0].obj || 0 };
+  for (const c of r.cells) removeBlockMesh(c.x, c.y, c.z);
+  restack(me() && me().id);
+
+  clearCarryMeshes();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x7fb2ff, transparent: true, opacity: 0.42, depthWrite: false });
+  for (let i = 0; i < r.cells.length; i++) carryGroup.add(new THREE.Mesh(BOX, mat));
+  updateCarryPreview();
+
+  carryBar.hidden = false;
+  toast('Vật thể hiện mờ trước mặt — bấm Đặt xuống để chốt');
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {} }
+}
+
+function endCarry(putBack) {
+  if (!carrying) return;
+  if (putBack) {
+    for (const c of carrying.cells) addBlockMesh(c.x, c.y, c.z, c.t, me() && me().id, c.obj);
+    restack(me() && me().id);
+  }
+  carrying = null;
+  clearCarryMeshes();
+  carryBar.hidden = true;
+  updateNote();
+}
+
+async function dropCarry() {
+  if (!carrying) return;
+  const put = carryTarget();
+  const why = carryValid(put);
+  if (why) { toast(why); return; }
+  const take = carrying.cells.map((c) => ({ x: c.x, y: c.y, z: c.z }));
+  $('carryDrop').disabled = true;
+  const r = await post('/world/move', { initData: initData(), take, put });
+  $('carryDrop').disabled = false;
+  if (!r.ok || !r.body || !r.body.ok) {
+    const e = r.body && r.body.error;
+    toast(e === 'occupied' ? 'Chỗ đó có khối của người khác'
+        : e === 'outside-world' ? 'Ra ngoài thế giới rồi'
+        : e === 'too-high' ? 'Cao quá rồi' : 'Không đặt được — giữ nguyên chỗ cũ');
+    return;
+  }
+  const cells = r.body.blocks || put;
+  for (const b of cells) addBlockMesh(b.x, b.y, b.z, b.t, me() && me().id, b.obj);
+  restack(me() && me().id);
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} }
+  toast('Đã đặt ' + cells.length + ' khối ở chỗ mới');
+  endCarry(false);
+}
+
+$('carryDrop').onclick = () => dropCarry();
+$('carryCancel').onclick = () => { endCarry(true); toast('Giữ nguyên chỗ cũ'); };
+
+/* ---------------------------------------------------------------- đặt vật thể ra thế giới */
+const buildPanel = $('buildPanel'), buildIn = $('buildIn'), buildHint = $('buildHint');
+
+/** Ô đích: cách nhân vật 4 ô về phía đang quay mặt. */
+function anchorCell() {
+  const fx = Math.sin(player.yaw || 0), fz = Math.cos(player.yaw || 0);
+  return {
+    tx: Math.floor(player.x) + Math.round(fx * 4),
+    tz: Math.floor(player.z) + Math.round(fz * 4),
+  };
+}
+
+/** Chuyển khối cục bộ → toạ độ thật, bỏ những ô rơi ra ngoài thế giới. */
+function objectBlocks(cells, o, tx, tz) {
+  const WX = COLS * PLOT, WZ = ROWS * PLOT;
+  if (o.w > WX || o.d > WZ) return [];                  // to hơn cả thế giới
+  // kéo cả vật thể vào trong thế giới (dịch đi) chứ không cắt cụt mất một góc
+  const ax = clampI(tx - Math.floor(o.w / 2), 0, WX - o.w);
+  const az = clampI(tz - Math.floor(o.d / 2), 0, WZ - o.d);
+  const baseY = topAt(clampI(tx, 0, WX - 1), clampI(tz, 0, WZ - 1));
+  const out = [];
+  for (const c of cells) {
+    const bx = ax + c[0], by = baseY + c[1], bz = az + c[2];
+    if (bx < 0 || bz < 0 || bx >= WX || bz >= WZ || by < 0 || by > MAX_Y) continue;
+    out.push({ x: bx, y: by, z: bz, t: c[3] });
+  }
+  return out;
+}
+
+const EXAMPLES = ['nhà 2 tầng bằng gỗ', 'cây to', 'tháp cao 8', 'hàng rào gạch',
+                  'trái tim', 'kim tự tháp', 'cầu thang', 'tượng người'];
+
+function buildHintRefresh() {
+  const raw = buildIn.value.trim();
+  if (!raw) {
+    buildHint.className = 'buildHint';
+    buildHint.innerHTML = 'Gõ mô tả rồi bấm Tạo. Vật thể hiện ra <b>trước mặt</b> bạn.';
+    return null;
+  }
+  const p = parsePrompt(raw);
+  if (!p.ok) {
+    buildHint.className = 'buildHint bad';
+    buildHint.textContent = p.why + '. Thử: ' + EXAMPLES.slice(0, 5).join(' · ');
+    return null;
+  }
+  const { cells, o } = buildFromSpec(p.spec);
+  const { tx, tz } = anchorCell();
+  const real = objectBlocks(cells, o, tx, tz);
+  const matName = p.spec.matName || 'theo hình';
+  buildHint.className = 'buildHint';
+  buildHint.innerHTML = '→ <b>' + p.spec.shape.ten + '</b> · ' + o.w + '×' + o.d
+    + ' · cao ' + o.h + ' · ' + matName + ' · <b>' + real.length + '</b> khối (còn '
+    + (MAX_BLOCKS - myBlocks) + ' chỗ)';
+  if (myBlocks + real.length > MAX_BLOCKS) {
+    buildHint.className = 'buildHint bad';
+    buildHint.innerHTML += ' — không đủ chỗ, xoá bớt khối đi';
+    return null;
+  }
+  return real;
+}
+
+function openBuild(open) {
+  if (open) { openChat(false); setPal(false); }
+  buildPanel.classList.toggle('on', open);
+  if (open) setTimeout(() => { buildHintRefresh(); }, 40);
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} }
+}
+$('buildBtn').onclick = () => openBuild(!buildPanel.classList.contains('on'));
+$('buildGo').onclick = () => createObject();
+$('buildClose').onclick = () => openBuild(false);
+buildIn.addEventListener('input', buildHintRefresh);
+buildIn.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); createObject(); }
+});
+(function chips() {
+  const box = $('buildChips');
+  EXAMPLES.forEach((ex) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.textContent = ex;
+    b.onclick = () => { buildIn.value = ex; buildHintRefresh(); buildIn.focus(); };
+    box.appendChild(b);
+  });
+})();
+
+async function createObject() {
+  const real = buildHintRefresh();
+  if (!real) return;
+  if (!real.length) { toast('Chỗ đó không đặt được'); return; }
+  const btn = $('buildGo');
+  btn.disabled = true;
+  $('buildGoText').textContent = 'Đang tạo…';
+
+  const r = await post('/world/blocks', { initData: initData(), blocks: real });
+  btn.disabled = false;
+  $('buildGoText').textContent = 'Tạo';
+
+  if (!r.ok || !r.body || !r.body.ok) {
+    const e = r.body && r.body.error;
+    toast(e === 'block-limit' ? 'Hết chỗ xây — xoá bớt khối đi'
+        : e === 'no-room' ? 'Chỗ đó kín rồi'
+        : e === 'outside-world' ? 'Ra ngoài thế giới rồi' : 'Không tạo được');
+    return;
+  }
+  const obj = r.body.obj;
+  for (const b of (r.body.blocks || real)) addBlockMesh(b.x, b.y, b.z, b.t, me() && me().id, obj);
+  restack(me() && me().id);
+  myBlocks = r.body.have;
+  updateNote();
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {} }
+  toast('Đã tạo ' + (r.body.blocks || real).length + ' khối'
+        + (r.body.skipped ? ' (bỏ ' + r.body.skipped + ' ô đã có người chiếm)' : ''));
+  openBuild(false);
 }
 
 /* ---------------------------------------------------------------- chat trong game */
@@ -1286,6 +1855,7 @@ function updateBadge() {
 }
 
 function openChat(open) {
+  if (open) openBuild(false);
   chatOpen = open;
   chatPanel.classList.toggle('on', open);
   if (open) {
