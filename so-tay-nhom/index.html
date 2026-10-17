@@ -161,29 +161,50 @@ const $ = id => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
 const fromGroup = !!(chat && String(chat.id) === GROUP_ID);
 
+/* Danh sách được duyệt: games/group-digest-members/scores/tg_<user_id> */
+async function approved(uid) {
+  if (!uid) return false;
+  try {
+    const r = await fetch(FS_BASE + '/games/group-digest-members/scores/tg_' + encodeURIComponent(uid) + '?key=' + FS_KEY);
+    if (!r.ok) return false;
+    return !!(await r.json()).fields;
+  } catch (e) { return false; }
+}
+
+function myName() {
+  return user ? ([user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || '') : '';
+}
+
+/* Thứ tự xét quyền:
+   1) Telegram nói đang mở từ đúng nhóm        → cho xem luôn
+   2) user id có trong danh sách đã duyệt      → cho xem (initData do Telegram ký)
+   3) có vé do Hub phát (hub còn initData)     → theo cờ allow của vé
+   4) còn lại                                  → chờ duyệt                            */
 async function ticketCheck() {
-  if (fromGroup) return { ok: true, who: '' };
-  if (!TOKEN) return { ok: false, why: 'no-ticket' };
+  if (!inTg) return { ok: false, why: 'no-tg' };
+  if (fromGroup) return { ok: true, who: myName() };
+  if (user && await approved(user.id)) return { ok: true, who: myName() };
+  if (!TOKEN) return { ok: false, why: 'pending', who: myName() };
   try {
     const r = await fetch(FS_BASE + '/games/group-digest-tickets/scores/' + encodeURIComponent(TOKEN) + '?key=' + FS_KEY);
-    if (!r.ok) return { ok: false, why: 'no-ticket' };
+    if (!r.ok) return { ok: false, why: 'pending', who: myName() };
     const f = ((await r.json()).fields) || {};
     const allow = !!(f.allow && f.allow.booleanValue);
     const exp = parseInt((f.score || {}).integerValue || '0', 10);
-    const who = (f.userName || {}).stringValue || '';
+    const who = (f.userName || {}).stringValue || myName();
     if (!allow) return { ok: false, why: 'pending', who };
-    if (exp && exp < Math.floor(Date.now() / 1000)) return { ok: false, why: 'expired', who };
+    if (exp && exp < Math.floor(Date.now() / 1000)) return { ok: false, why: 'ticket-expired', who };
     return { ok: true, who };
   } catch (e) { return { ok: false, why: 'offline' }; }
 }
 
 const GATES = {
-  'no-ticket': ['🔒', 'Chỉ thành viên nhóm mới xem được',
-    'App chỉ mở được từ trong nhóm. Bạn hãy vào nhóm và bấm nút 📖 Sổ Tay Nhóm nhé.'],
-  'pending': ['🕓', 'Đang chờ duyệt',
-    'Bạn chưa có trong danh sách được xem. Nhắn vào nhóm một câu để xin quyền, duyệt xong mở lại là đọc được.'],
-  'expired': ['⌛', 'Phiên xem đã hết hạn',
-    'Vé vào sổ chỉ sống 15 phút. Bấm lại nút 📖 Sổ Tay Nhóm trong nhóm là có vé mới.'],
+  'no-tg': ['🔒', 'Mở app trong Telegram',
+    'Sổ Tay Nhóm chỉ mở được bằng Telegram (Mini App). Hiện tại bạn đang mở bằng trình duyệt nên không xem được nội dung.'],
+  'pending': ['🕓', 'Chờ duyệt',
+    'Bạn chưa có tên trong danh sách xem sổ. Nhắn một câu vào nhóm để xin quyền — duyệt xong mở lại là đọc được ngay.'],
+  'ticket-expired': ['⌛', 'Phiên xem đã hết hạn',
+    'Vé vào sổ sống 15 phút. Bấm lại nút 📖 Sổ Tay Nhóm trong nhóm là có vé mới.'],
   'offline': ['📡', 'Không kiểm tra được quyền',
     'Mạng đang chập. Thử lại sau ít phút nhé.']
 };

@@ -182,16 +182,19 @@
   .app:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent-hi);border-color:transparent}
 
   /* Icon: khung đồng nhất, mỗi app một sắc thái qua --tint.
-     --app-ink (đặt riêng từng app) là độ sáng nét ở NỀN TỐI; nền sáng
-     trừ đi --ink-shift để nét đủ đậm — nhờ vậy một giá trị dùng cho cả 2 theme. */
+     --app-ink / --app-ink-light được TÍNH RIÊNG cho từng hue sao cho
+     độ chói cảm nhận bằng nhau (vàng sáng hơn đỏ ở cùng L, nên L phải khác). */
   .ico{
     width:42px;height:42px;flex:none;
     border-radius:11px;
     background:hsl(var(--tint,240) 52% var(--ico-light) / var(--ico-alpha));
     border:1px solid hsl(var(--tint,240) 52% var(--ico-light) / var(--ico-edge));
     display:grid;place-items:center;
-    color:hsl(var(--tint,240) var(--ico-sat) calc(var(--app-ink,66%) - var(--ink-shift)));
+    color:hsl(var(--tint,240) var(--ico-sat) var(--app-ink,62%));
     transition:border-color .16s var(--ease),background .16s var(--ease);
+  }
+  :root[data-theme="light"] .ico{
+    color:hsl(var(--tint,240) var(--ico-sat) var(--app-ink-light,42%));
   }
   .ico svg{width:22px;height:22px;display:block;stroke-width:1.9}
   .app:hover .ico{
