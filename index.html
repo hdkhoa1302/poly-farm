@@ -3,450 +3,130 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🌾 Poly Farm - Nông Trại 2D Low-Poly</title>
+<title>🎮 App Hub - Telegram Mini Apps</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', system-ui, sans-serif; }
-  #canvas { display: block; width: 100vw; height: 100vh; }
-  #ui {
-    position: fixed; top: 12px; left: 12px; z-index: 10;
-    background: rgba(20,30,20,0.75); color: #fff; padding: 12px 16px;
-    border-radius: 12px; backdrop-filter: blur(6px); min-width: 220px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #fff; min-height: 100vh; padding: 24px 16px;
   }
-  #ui h1 { font-size: 16px; margin-bottom: 8px; color: #ffd54f; }
-  #ui .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 14px; }
-  #ui .money { color: #81c784; font-weight: bold; }
-  #toolbar {
-    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    z-index: 10; display: flex; gap: 8px; background: rgba(20,30,20,0.75);
-    padding: 10px; border-radius: 14px; backdrop-filter: blur(6px);
+  .container { max-width: 480px; margin: 0 auto; }
+  h1 { text-align: center; font-size: 26px; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #aaa; font-size: 14px; margin-bottom: 24px; }
+  .app-card {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px; padding: 16px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 14px;
+    backdrop-filter: blur(8px); transition: transform .15s, background .15s;
   }
-  .tool-btn {
-    background: #2e7d32; color: #fff; border: 2px solid #1b5e20;
-    padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 13px;
-    transition: transform .15s, background .15s; user-select: none;
+  .app-card:hover { transform: translateY(-2px); background: rgba(255,255,255,0.12); }
+  .app-icon { font-size: 40px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); border-radius: 12px; }
+  .app-info { flex: 1; }
+  .app-name { font-size: 17px; font-weight: 600; margin-bottom: 2px; }
+  .app-desc { font-size: 13px; color: #bbb; }
+  .play-btn {
+    background: linear-gradient(135deg, #0088cc, #0066aa);
+    color: #fff; border: none; padding: 10px 18px; border-radius: 10px;
+    font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    transition: transform .15s, box-shadow .15s;
   }
-  .tool-btn:hover { transform: translateY(-2px); background: #388e3c; }
-  .tool-btn.active { background: #ffd54f; color: #1b5e20; border-color: #ffca28; }
-  #hint {
-    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-    color: #fff; background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 8px;
-    font-size: 12px; z-index: 10; pointer-events: none;
-  }
-  #msg {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    color: #fff; font-size: 22px; font-weight: bold; text-shadow: 0 2px 8px #000;
-    z-index: 20; pointer-events: none; opacity: 0; transition: opacity .3s;
-  }
+  .play-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,136,204,0.4); }
+  .empty { text-align: center; color: #888; padding: 40px 0; font-size: 14px; }
+  .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
+  .status { text-align: center; font-size: 12px; color: #81c784; margin-bottom: 16px; }
 </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
-<div id="ui">
-  <h1>🌾 Poly Farm</h1>
-  <div class="row"><span>💰 Tiền</span><span class="money" id="money">100</span></div>
-  <div class="row"><span>📦 Kho</span><span id="inventory">0</span></div>
-  <div class="row"><span>⏱ Ngày</span><span id="day">1</span></div>
-  <div class="row"><span>🌤 Thời tiết</span><span id="weather">Nắng</span></div>
+<div class="container">
+  <h1>🎮 App Hub</h1>
+  <p class="subtitle">Chọn ứng dụng để mở trong Telegram</p>
+  <div class="status" id="status"></div>
+  <div id="app-list"></div>
+  <div class="empty" id="empty" style="display:none;">Chưa có app nào. Hãy yêu cầu tạo app mới!</div>
+  <div class="footer">Powered by GitHub Pages + Telegram Mini Apps</div>
 </div>
-<div id="toolbar">
-  <div class="tool-btn active" data-tool="hoe">🔨 Cày đất</div>
-  <div class="tool-btn" data-tool="wheat">🌾 Lúa mì</div>
-  <div class="tool-btn" data-tool="carrot">🥕 Cà rốt</div>
-  <div class="tool-btn" data-tool="tomato">🍅 Cà chua</div>
-  <div class="tool-btn" data-tool="harvest">✂️ Thu hoạch</div>
-  <div class="tool-btn" data-tool="water">💧 Tưới nước</div>
-</div>
-<div id="hint">Click vào ô đất để thao tác • Chuột phải để xoay camera</div>
-<div id="msg"></div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+// ===== CẤU HÌNH =====
+// Thay bằng username bot của bạn (không có @)
+const BOT_USERNAME = 'YOUR_BOT_USERNAME';
+
+// ===== DANH SÁCH APP =====
+// Khi thêm app mới, thêm entry vào đây
+const APPS = [
+  {
+    id: 'poly-farm',
+    name: 'Poly Farm',
+    icon: '🌾',
+    desc: 'Game nông trại 2D low-poly: trồng cây, thu hoạch, chăm sóc động vật',
+    shortName: 'polyfarm',
+    url: 'https://hdkhoa1302.github.io/poly-farm/poly-farm/'
   }
-}
-</script>
-<script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  // Thêm app mới ở đây:
+  // {
+  //   id: 'tetris',
+  //   name: 'Tetris',
+  //   icon: '🧱',
+  //   desc: 'Game xếp hình cổ điển',
+  //   shortName: 'tetris',
+  //   url: 'https://hdkhoa1302.github.io/poly-farm/tetris/'
+  // }
+];
 
-const GRID = 6;
-const TILE = 1.6;
-const CROP_COST = { wheat: 10, carrot: 15, tomato: 25 };
-const CROP_SELL = { wheat: 25, carrot: 40, tomato: 70 };
-const GROW_TIME = { wheat: 8, carrot: 12, tomato: 18 };
-
-const state = {
-  money: 100,
-  inventory: 0,
-  day: 1,
-  tool: 'hoe',
-  tiles: [],
-  animals: [],
-};
-
-const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 30, 60);
-
-const camera = new THREE.OrthographicCamera(-12, 12, 12, -12, 0.1, 100);
-camera.position.set(12, 14, 12);
-camera.lookAt(0, 0, 0);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.maxPolarAngle = Math.PI / 2.2;
-controls.minZoom = 0.6;
-controls.maxZoom = 2.5;
-controls.target.set(0, 0, 0);
-
-const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7c3f, 0.7);
-scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff4e0, 1.1);
-sun.position.set(8, 15, 6);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
-sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
-scene.add(sun);
-
-const groundGeo = new THREE.PlaneGeometry(40, 40);
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x6b8e4e, flatShading: true, roughness: 0.9 });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
-
-const tileGeo = new THREE.BoxGeometry(TILE, 0.3, TILE);
-const tileMatFresh = new THREE.MeshStandardMaterial({ color: 0x8d6e4a, flatShading: true });
-const tileMatTilled = new THREE.MeshStandardMaterial({ color: 0x5d4037, flatShading: true });
-const tileMatWatered = new THREE.MeshStandardMaterial({ color: 0x3e2723, flatShading: true });
-
-const half = (GRID * TILE) / 2;
-for (let i = 0; i < GRID; i++) {
-  for (let j = 0; j < GRID; j++) {
-    const mesh = new THREE.Mesh(tileGeo, tileMatFresh.clone());
-    mesh.position.set(-half + i * TILE + TILE / 2, 0.15, -half + j * TILE + TILE / 2);
-    mesh.receiveShadow = true;
-    mesh.castShadow = true;
-    mesh.userData = { i, j };
-    scene.add(mesh);
-    state.tiles.push({ mesh, status: 'fresh', crop: null, plantedAt: 0, watered: false, _stage: -1 });
-  }
+// ===== RENDER =====
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  document.getElementById('status').textContent = '✅ Đang chạy trong Telegram';
+} else {
+  document.getElementById('status').textContent = '🌐 Đang chạy trên trình duyệt';
 }
 
-function makeCrop(type, stage) {
-  const g = new THREE.Group();
-  let color, height;
-  if (type === 'wheat') { color = 0xf5d76e; height = 0.2 + stage * 0.5; }
-  else if (type === 'carrot') { color = 0xff7043; height = 0.15 + stage * 0.35; }
-  else { color = 0xe53935; height = 0.2 + stage * 0.4; }
-  const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.08, height, 6),
-    new THREE.MeshStandardMaterial({ color: 0x558b2f, flatShading: true })
-  );
-  stem.position.y = height / 2;
-  stem.castShadow = true;
-  g.add(stem);
-  const top = new THREE.Mesh(
-    new THREE.ConeGeometry(0.25 + stage * 0.15, 0.4 + stage * 0.3, 6),
-    new THREE.MeshStandardMaterial({ color, flatShading: true })
-  );
-  top.position.y = height + 0.2;
-  top.castShadow = true;
-  g.add(top);
-  if (type === 'tomato' && stage >= 2) {
-    for (let k = 0; k < 3; k++) {
-      const fruit = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 8, 8),
-        new THREE.MeshStandardMaterial({ color: 0xc62828, flatShading: true })
-      );
-      fruit.position.set(Math.cos(k * 2.1) * 0.2, height * 0.6, Math.sin(k * 2.1) * 0.2);
-      fruit.castShadow = true;
-      g.add(fruit);
-    }
-  }
-  return g;
-}
+const list = document.getElementById('app-list');
+const empty = document.getElementById('empty');
 
-function spawnAnimal(type) {
-  const g = new THREE.Group();
-  const bodyColor = type === 'cow' ? 0xf5f5f5 : 0xffffff;
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.0, 0.6, 0.6),
-    new THREE.MeshStandardMaterial({ color: bodyColor, flatShading: true })
-  );
-  body.position.y = 0.6;
-  body.castShadow = true;
-  g.add(body);
-  const head = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.4, 0.4),
-    new THREE.MeshStandardMaterial({ color: type === 'cow' ? 0x8d6e63 : 0xffcc80, flatShading: true })
-  );
-  head.position.set(0.6, 0.9, 0);
-  head.castShadow = true;
-  g.add(head);
-  if (type === 'cow') {
-    const spot = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.05, 0.2),
-      new THREE.MeshStandardMaterial({ color: 0x3e2723, flatShading: true })
-    );
-    spot.position.set(-0.1, 0.92, 0.15);
-    g.add(spot);
-  }
-  for (let lx = -1; lx <= 1; lx += 2) {
-    for (let lz = -1; lz <= 1; lz += 2) {
-      const leg = new THREE.Mesh(
-        new THREE.BoxGeometry(0.15, 0.4, 0.15),
-        new THREE.MeshStandardMaterial({ color: 0x5d4037, flatShading: true })
-      );
-      leg.position.set(lx * 0.35, 0.2, lz * 0.2);
-      leg.castShadow = true;
-      g.add(leg);
-    }
-  }
-  const ang = Math.random() * Math.PI * 2;
-  const r = 8 + Math.random() * 6;
-  g.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
-  g.userData = { type, dir: Math.random() * Math.PI * 2, speed: 0.8 + Math.random() * 0.6, timer: 0 };
-  scene.add(g);
-  state.animals.push(g);
-}
-
-spawnAnimal('cow');
-spawnAnimal('cow');
-spawnAnimal('chicken');
-spawnAnimal('chicken');
-spawnAnimal('chicken');
-
-const fenceMat = new THREE.MeshStandardMaterial({ color: 0x8d6e4a, flatShading: true });
-function addFence(x, z, rot) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(4, 0.6, 0.15), fenceMat);
-  m.position.set(x, 0.3, z);
-  m.rotation.y = rot;
-  m.castShadow = true;
-  scene.add(m);
-}
-for (let i = -1; i <= 1; i++) {
-  addFence(i * 4, -10, 0);
-  addFence(i * 4, 10, 0);
-  addFence(-10, i * 4, Math.PI / 2);
-  addFence(10, i * 4, Math.PI / 2);
-}
-
-const barn = new THREE.Group();
-const barnBody = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 3), new THREE.MeshStandardMaterial({ color: 0xc62828, flatShading: true }));
-barnBody.position.y = 1.5; barnBody.castShadow = true; barn.add(barnBody);
-const barnRoof = new THREE.Mesh(new THREE.ConeGeometry(3, 2, 4), new THREE.MeshStandardMaterial({ color: 0x5d4037, flatShading: true }));
-barnRoof.position.y = 4; barnRoof.rotation.y = Math.PI / 4; barnRoof.castShadow = true; barn.add(barnRoof);
-barn.position.set(-12, 0, -12);
-scene.add(barn);
-
-function addTree(x, z) {
-  const g = new THREE.Group();
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.2, 6), new THREE.MeshStandardMaterial({ color: 0x5d4037, flatShading: true }));
-  trunk.position.y = 0.6; trunk.castShadow = true; g.add(trunk);
-  const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.0, 7), new THREE.MeshStandardMaterial({ color: 0x2e7d32, flatShading: true }));
-  leaves.position.y = 2.2; leaves.castShadow = true; g.add(leaves);
-  g.position.set(x, 0, z);
-  scene.add(g);
-}
-for (let i = 0; i < 8; i++) {
-  addTree(-15 + Math.random() * 3, -15 + Math.random() * 28);
-  addTree(15 - Math.random() * 3, -15 + Math.random() * 28);
-}
-
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-let hoveredTile = null;
-
-function pickTile(e) {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-  const meshes = state.tiles.map(t => t.mesh);
-  const hits = raycaster.intersectObjects(meshes);
-  if (hits.length) {
-    const m = hits[0].object;
-    return state.tiles.find(t => t.mesh === m);
-  }
-  return null;
-}
-
-canvas.addEventListener('mousemove', (e) => {
-  const t = pickTile(e);
-  if (hoveredTile && hoveredTile !== t) hoveredTile.mesh.scale.set(1, 1, 1);
-  hoveredTile = t;
-  if (t) t.mesh.scale.set(1.05, 1.1, 1.05);
-});
-
-canvas.addEventListener('click', (e) => {
-  const t = pickTile(e);
-  if (!t) return;
-  handleTileClick(t);
-});
-
-function showMsg(text) {
-  const el = document.getElementById('msg');
-  el.textContent = text;
-  el.style.opacity = 1;
-  setTimeout(() => el.style.opacity = 0, 1200);
-}
-
-function updateUI() {
-  document.getElementById('money').textContent = state.money;
-  document.getElementById('inventory').textContent = state.inventory;
-  document.getElementById('day').textContent = state.day;
-}
-
-function handleTileClick(t) {
-  if (state.tool === 'hoe') {
-    if (t.status === 'fresh') {
-      t.status = 'tilled';
-      t.mesh.material = tileMatTilled.clone();
-      showMsg('Đã cày đất!');
-    }
-  } else if (state.tool === 'water') {
-    if (t.status === 'tilled' || t.crop) {
-      t.watered = true;
-      t.mesh.material = tileMatWatered.clone();
-      showMsg('Đã tưới nước 💧');
-    }
-  } else if (['wheat', 'carrot', 'tomato'].includes(state.tool)) {
-    if (t.status === 'tilled' && !t.crop) {
-      const cost = CROP_COST[state.tool];
-      if (state.money < cost) { showMsg('Không đủ tiền!'); return; }
-      state.money -= cost;
-      t.crop = state.tool;
-      t.plantedAt = performance.now() / 1000;
-      t.status = 'planted';
-      const crop = makeCrop(state.tool, 0);
-      crop.position.set(0, 0.3, 0);
-      t.mesh.add(crop);
-      t.cropMesh = crop;
-      showMsg('Đã trồng ' + state.tool + ' 🌱');
-      updateUI();
-    }
-  } else if (state.tool === 'harvest') {
-    if (t.crop) {
-      const age = (performance.now() / 1000) - t.plantedAt;
-      const needed = GROW_TIME[t.crop] / (t.watered ? 1 : 1.6);
-      if (age >= needed) {
-        const sell = CROP_SELL[t.crop];
-        state.money += sell;
-        state.inventory++;
-        if (t.cropMesh) t.mesh.remove(t.cropMesh);
-        t.crop = null;
-        t.cropMesh = null;
-        t.status = 'tilled';
-        t.watered = false;
-        t.mesh.material = tileMatTilled.clone();
-        t._stage = -1;
-        showMsg('Thu hoạch! +' + sell + '💰');
-        updateUI();
-      } else {
-        const left = Math.ceil(needed - age);
-        showMsg('Chưa chín! Còn ' + left + 's');
-      }
-    }
-  }
-}
-
-document.querySelectorAll('.tool-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    state.tool = btn.dataset.tool;
+if (APPS.length === 0) {
+  empty.style.display = 'block';
+} else {
+  APPS.forEach(app => {
+    const card = document.createElement('div');
+    card.className = 'app-card';
+    card.innerHTML = `
+      <div class="app-icon">${app.icon}</div>
+      <div class="app-info">
+        <div class="app-name">${app.name}</div>
+        <div class="app-desc">${app.desc}</div>
+      </div>
+      <button class="play-btn" data-id="${app.id}">▶ Chơi</button>
+    `;
+    list.appendChild(card);
   });
-});
 
-function updateCrops(dt) {
-  state.tiles.forEach(t => {
-    if (t.crop && t.cropMesh) {
-      const age = (performance.now() / 1000) - t.plantedAt;
-      const needed = GROW_TIME[t.crop] / (t.watered ? 1 : 1.6);
-      const stage = Math.min(3, Math.floor((age / needed) * 3));
-      if (t._stage !== stage) {
-        t.mesh.remove(t.cropMesh);
-        const c = makeCrop(t.crop, stage);
-        c.position.set(0, 0.3, 0);
-        t.mesh.add(c);
-        t.cropMesh = c;
-        t._stage = stage;
-      }
-      t.cropMesh.rotation.y = Math.sin(performance.now() / 800 + t.mesh.position.x) * 0.05;
-    }
+  list.querySelectorAll('.play-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const app = APPS.find(a => a.id === btn.dataset.id);
+      openApp(app);
+    });
   });
 }
 
-function updateAnimals(dt) {
-  state.animals.forEach(a => {
-    a.userData.timer += dt;
-    if (a.userData.timer > 2 + Math.random() * 2) {
-      a.userData.timer = 0;
-      a.userData.dir += (Math.random() - 0.5) * 1.2;
-    }
-    a.position.x += Math.cos(a.userData.dir) * a.userData.speed * dt;
-    a.position.z += Math.sin(a.userData.dir) * a.userData.speed * dt;
-    if (Math.abs(a.position.x) > 16) { a.position.x = Math.sign(a.position.x) * 16; a.userData.dir += Math.PI; }
-    if (Math.abs(a.position.z) > 16) { a.position.z = Math.sign(a.position.z) * 16; a.userData.dir += Math.PI; }
-    a.rotation.y = -a.userData.dir + Math.PI / 2;
-    a.position.y = Math.abs(Math.sin(performance.now() / 300 + a.position.x)) * 0.05;
-  });
-}
-
-let dayTime = 0;
-function updateDayNight(dt) {
-  dayTime += dt * 0.02;
-  const t = (Math.sin(dayTime) + 1) / 2;
-  const sky = new THREE.Color().lerpColors(new THREE.Color(0x1a237e), new THREE.Color(0x87ceeb), t);
-  scene.background = sky;
-  scene.fog.color = sky;
-  sun.intensity = 0.3 + t * 0.9;
-  hemi.intensity = 0.3 + t * 0.5;
-  if (dayTime > Math.PI * 2) {
-    dayTime = 0;
-    state.day++;
-    const weathers = ['Nắng', 'Mây', 'Mưa nhẹ', 'Gió'];
-    document.getElementById('weather').textContent = weathers[Math.floor(Math.random() * weathers.length)];
-    updateUI();
+function openApp(app) {
+  if (BOT_USERNAME === 'YOUR_BOT_USERNAME') {
+    // Chưa cấu hình bot → mở URL trực tiếp
+    if (tg) tg.openLink(app.url);
+    else window.open(app.url, '_blank');
+    return;
+  }
+  const miniAppUrl = `https://t.me/${BOT_USERNAME}/${app.shortName}`;
+  if (tg) {
+    tg.openTelegramLink(miniAppUrl);
+  } else {
+    window.open(miniAppUrl, '_blank');
   }
 }
-
-window.addEventListener('resize', () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  const aspect = window.innerWidth / window.innerHeight;
-  const size = 12;
-  camera.left = -size * aspect; camera.right = size * aspect;
-  camera.top = size; camera.bottom = -size;
-  camera.updateProjectionMatrix();
-});
-
-let last = performance.now();
-function animate() {
-  requestAnimationFrame(animate);
-  const now = performance.now();
-  const dt = Math.min((now - last) / 1000, 0.1);
-  last = now;
-  updateCrops(dt);
-  updateAnimals(dt);
-  updateDayNight(dt);
-  controls.update();
-  renderer.render(scene, camera);
-}
-animate();
-updateUI();
 </script>
 </body>
 </html>
