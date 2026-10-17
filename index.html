@@ -271,6 +271,8 @@
   .act svg{width:15px;height:15px;display:block}
   .act:hover{color:var(--text);border-color:var(--border);background:rgba(127,127,127,.14)}
   .act.del:hover{color:#ff6b6b;border-color:rgba(255,107,107,.45);background:rgba(255,107,107,.12)}
+  /* đang chờ bấm lần 2 để xoá: tô đỏ hẳn cho khỏi nhầm */
+  .act.del.arming{color:#fff;background:#e5484d;border-color:#e5484d}
 
   /* trong chế độ Sửa: không mở app, không nhích sang phải */
   body.manage .app{cursor:default}
@@ -281,9 +283,14 @@
      lên opacity của app bị ẩn → phải tắt animation cho hàng đang ẩn/kéo */
   .app.hidden-app{opacity:.45;animation:none}
   .app.hidden-app .name{text-decoration:line-through;text-decoration-color:var(--faint)}
-  .app.dragging{position:relative;z-index:5;border-color:var(--accent-hi);
-                background:var(--row-hover);box-shadow:0 14px 30px rgba(0,0,0,.4);animation:none}
+  /* hàng đang kéo: RA KHỎI luồng (inline style position:fixed) để các hàng khác
+     không dịch → trung điểm đứng yên → không nhảy lên nhảy xuống */
+  .app.dragging{position:fixed;z-index:50;border-color:var(--accent-hi);
+                background:var(--row-hover);box-shadow:0 18px 40px rgba(0,0,0,.45);
+                animation:none;cursor:grabbing;will-change:top}
   .app.dragging .drag{cursor:grabbing;color:var(--accent-hi)}
+  /* ô giữ chỗ: chiếm đúng chỗ cũ để danh sách không co lại */
+  .ph{flex:none;border-radius:var(--r-lg);border:1px dashed var(--border);background:rgba(127,127,127,.05)}
   .no-anim .app{animation:none}
 </style>
 </head>
@@ -494,7 +501,8 @@ function render() {
       `<span class="meta"><span class="name"></span><span class="desc"></span></span>` +
       `<span class="act hv" title="${isHidden ? 'Hiện lại' : 'Ẩn app này'}">` +
         `<i data-icon="${isHidden ? 'eye' : 'eye-off'}" data-size="15"></i></span>` +
-      (isAdmin() ? `<span class="act del" title="Xoá khỏi Hub — áp dụng cho mọi người">` +
+      (isAdmin() ? `<span class="act del${confirmDel === app.id ? ' arming' : ''}" ` +
+        `title="Xoá khỏi Hub — áp dụng cho mọi người">` +
         `<i data-icon="trash-2" data-size="15"></i></span>` : '') +
       `<span class="chev"><i data-icon="chevron-right" data-size="16"></i></span>`;
 
@@ -504,7 +512,7 @@ function render() {
     btn.addEventListener('click', (e) => {
       if (!manage) { openApp(app); return; }                  // chế độ thường: mở app
       if (e.target.closest('.act.hv')) { toggleHide(app.id); return; }
-      if (e.target.closest('.act.del')) { wipeApp(app, e.target.closest('.act.del')); return; }
+      if (e.target.closest('.act.del')) { askDelete(app); return; }
     });
     list.appendChild(btn);
   });
@@ -542,10 +550,26 @@ function toggleHide(id) {
   render();
 }
 
-/* ---------------- xoá (chỉ chủ sở hữu) ---------------- */
-async function wipeApp(app, el) {
-  if (!confirm('Xoá "' + app.name + '" khỏi Hub cho MỌI người?')) return;
-  el.style.opacity = '.4';
+/* ---------------- xoá (chỉ chủ sở hữu) ----------------
+ * Xác nhận bằng 2 bước NGAY TRONG APP, không dùng confirm(): webview Telegram
+ * không đảm bảo có hộp thoại native, nên confirm() có thể bị bỏ qua — nghĩa là
+ * một cú chạm là xoá app của mọi người, không có bước chặn nào.
+ */
+let confirmDel = null;      // id đang chờ bấm lần 2
+let confirmTimer = null;
+
+function askDelete(app) {
+  if (confirmDel === app.id) { confirmDel = null; clearTimeout(confirmTimer); wipeApp(app); return; }
+  confirmDel = app.id;
+  render();
+  setStatus('Bấm thùng rác lần nữa để xoá "' + app.name + '" khỏi Hub cho MỌI người.');
+  clearTimeout(confirmTimer);
+  confirmTimer = setTimeout(() => {
+    if (confirmDel === app.id) { confirmDel = null; render(); setStatus(''); }
+  }, 5000);
+}
+
+async function wipeApp(app) {
   try {
     const r = await fetch(API + '/apps/delete', {
       method: 'POST',
@@ -553,13 +577,11 @@ async function wipeApp(app, el) {
       body: JSON.stringify({ initData: myInit(), id: app.id })
     });
     if (!r.ok) {
-      el.style.opacity = '';
       setStatus(r.status === 403 ? 'Không xoá được — chỉ chủ sở hữu.' : 'Không xoá được (lỗi ' + r.status + ').');
       return;
     }
     gone.add(app.id);
   } catch (e) {
-    el.style.opacity = '';
     setStatus('Không xoá được — mạng lỗi.');
     return;
   }
@@ -576,9 +598,13 @@ async function loadDeleted() {
 }
 
 /* ---------------- kéo thả sắp xếp ----------------
- * Pointer Events để chạy cả cảm ứng lẫn chuột. Trong lúc kéo, hàng dịch bằng
- * transform và được CHÈN LẠI vào DOM khi vượt qua trung điểm hàng khác — cách
- * này không cần bù trừ toạ độ phức tạp, và vị trí đo lại luôn đúng.
+ * Pointer Events để chạy cả cảm ứng lẫn chuột.
+ *
+ * ĐIỂM MẤU CHỐT: hàng đang kéo phải được ĐƯA RA KHỎI LUỒNG LAYOUT (position:fixed)
+ * và để lại một ô giữ chỗ (placeholder). Nếu hàng vẫn chiếm chỗ trong luồng thì
+ * mỗi lần chèn lại, các hàng khác dịch đúng một hàng → trung điểm đổi → lần di
+ * chuyển sau lại chèn ngược lại → hàng nhảy lên nhảy xuống liên tục.
+ * Ô giữ chỗ thì không ảnh hưởng gì tới các hàng khác, nên trung điểm đứng yên.
  */
 let dragState = null;
 
@@ -587,13 +613,31 @@ list.addEventListener('pointerdown', (e) => {
   const handle = e.target.closest('.drag');
   if (!handle) return;
   const row = handle.closest('.app');
-  if (!row) return;
+  if (!row || dragState) return;
   e.preventDefault();
-  dragState = {
-    row, pid: e.pointerId, ty: 0,
-    grab: e.clientY - row.getBoundingClientRect().top,
-  };
+
+  const r = row.getBoundingClientRect();
+
+  // ô giữ chỗ: giữ đúng chỗ trong luồng để danh sách không co lại
+  const ph = document.createElement('div');
+  ph.className = 'ph';
+  ph.style.height = r.height + 'px';
+  list.insertBefore(ph, row);
+
+  // hàng ra khỏi luồng, toạ độ theo viewport
   row.classList.add('dragging');
+  row.style.position = 'fixed';
+  row.style.left = r.left + 'px';
+  row.style.top = r.top + 'px';
+  row.style.width = r.width + 'px';
+  row.style.height = r.height + 'px';
+  row.style.pointerEvents = 'none';
+
+  dragState = {
+    row, ph, pid: e.pointerId,
+    grab: e.clientY - r.top,      // điểm nắm trong hàng
+    h: r.height,
+  };
   if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (err) {} }
   try { handle.setPointerCapture(e.pointerId); } catch (err) {}
 });
@@ -601,31 +645,43 @@ list.addEventListener('pointerdown', (e) => {
 list.addEventListener('pointermove', (e) => {
   if (!dragState || e.pointerId !== dragState.pid) return;
   e.preventDefault();
-  const row = dragState.row;
-  const y = e.clientY - dragState.grab;          // top mong muốn của hàng
-  const h = row.offsetHeight;
+  const { row, ph, grab, h } = dragState;
 
+  const top = e.clientY - grab;             // top mong muốn (viewport)
+  row.style.top = top + 'px';
+
+  // tâm hàng đang kéo so với tâm các hàng KHÁC (chúng không đổi vì hàng kia
+  // đã ra khỏi luồng) → quyết định chèn ô giữ chỗ vào đâu
+  const center = top + h / 2;
   const others = [...list.querySelectorAll('.app')].filter(r => r !== row);
   let target = null;
   for (const r of others) {
     const b = r.getBoundingClientRect();
-    if (y + h / 2 < b.top + b.height / 2) { target = r; break; }
+    if (center < b.top + b.height / 2) { target = r; break; }
   }
-  if (row.nextElementSibling !== target) list.insertBefore(row, target);
+  if (ph.nextElementSibling !== target) list.insertBefore(ph, target);
 
-  // bỏ transform cũ ra khỏi phép đo rồi mới tính lại
-  const natural = row.getBoundingClientRect().top - dragState.ty;
-  dragState.ty = y - natural;
-  row.style.transform = 'translateY(' + dragState.ty + 'px)';
+  // tự cuộn khi kéo tới sát mép màn hình
+  const pad = 64;
+  if (e.clientY < pad) window.scrollBy(0, -12);
+  else if (e.clientY > window.innerHeight - pad) window.scrollBy(0, 12);
 });
 
 function endDrag(e) {
   if (!dragState) return;
   if (e && e.pointerId !== undefined && e.pointerId !== dragState.pid) return;
-  dragState.row.style.transform = '';
-  dragState.row.classList.remove('dragging');
+  const { row, ph } = dragState;
+
+  // đặt hàng về đúng chỗ ô giữ chỗ rồi trả lại luồng bình thường
+  list.insertBefore(row, ph);
+  ph.remove();
+  row.classList.remove('dragging');
+  row.style.position = row.style.left = row.style.top = '';
+  row.style.width = row.style.height = row.style.pointerEvents = '';
   dragState = null;
-  // lưu đúng thứ tự đang thấy; app không nằm trong danh sách (đã xoá) giữ ở cuối
+
+  // lưu đúng thứ tự đang thấy; app không nằm trong danh sách (đang ẩn/đã xoá)
+  // giữ nguyên phía sau để không mất chỗ
   const seen = [...list.querySelectorAll('.app')].map(r => r.dataset.id);
   order = seen.concat(APPS.map(a => a.id).filter(id => !seen.includes(id)));
   lsSave(LS_ORDER, order);
