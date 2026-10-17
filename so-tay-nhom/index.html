@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sổ Tay Nhóm</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#08090a; --panel:#0f1011; --surface:#191a1b; --surface-hi:#28282c;
+    --text:#f7f8f8; --body:#d0d6e0; --muted:#8a8f98; --faint:#62666d;
+    --border:rgba(255,255,255,.08); --border-subtle:rgba(255,255,255,.05); --border-hair:rgba(255,255,255,.04);
+    --accent:#5e6ad2; --accent-hi:#828fff; --ok:#27a644; --warn:#e5a00d;
+    --r-md:8px; --r-lg:12px; --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  html[data-theme="light"]{
+    --bg:#ffffff; --panel:#fafafa; --surface:#f4f4f5; --surface-hi:#e8e8ea;
+    --text:#08090a; --body:#3c4149; --muted:#6f6e77; --faint:#8a8f98;
+    --border:rgba(0,0,0,.09); --border-subtle:rgba(0,0,0,.06); --border-hair:rgba(0,0,0,.045);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  body{
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    font-feature-settings:'cv01','ss03';
+    background:var(--bg); color:var(--text);
+    min-height:100dvh; display:flex; justify-content:center;
+    letter-spacing:-.011em;
+  }
+  .shell{width:100%;max-width:560px;padding:calc(18px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:18px}
+
+  /* ---------- top ---------- */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .mark{width:34px;height:34px;flex:none;border-radius:10px;background:linear-gradient(160deg,var(--accent),#4a52a8);display:grid;place-items:center;font-size:16px;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 4px 14px rgba(94,106,210,.28)}
+  .brand h1{font-size:15.5px;font-weight:500;letter-spacing:-.02em;line-height:1.2}
+  .brand p{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:56vw}
+  .you{display:flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;border:1px solid var(--border-subtle);background:rgba(127,127,127,.06);border-radius:9999px;font-size:12px;font-weight:500;color:var(--body);max-width:40%}
+  .you img,.you .pip{width:20px;height:20px;border-radius:50%;flex:none;object-fit:cover;background:var(--surface-hi);display:grid;place-items:center;font-size:10px;font-weight:600}
+  .you span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---------- gate ---------- */
+  .gate{border:1px solid var(--border-subtle);border-radius:var(--r-lg);padding:26px 20px;text-align:center;background:rgba(127,127,127,.04)}
+  .gate .big{font-size:30px;margin-bottom:10px}
+  .gate h2{font-size:16px;font-weight:600;margin-bottom:6px}
+  .gate p{font-size:13px;color:var(--muted);line-height:1.6}
+  .gate button{margin-top:16px;background:var(--accent);color:#fff;border:none;padding:10px 18px;border-radius:10px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+
+  /* ---------- label ---------- */
+  .label-row{display:flex;align-items:baseline;justify-content:space-between;padding:0 2px}
+  .overline{font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+  .count{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--faint)}
+
+  /* ---------- digest card ---------- */
+  .list{display:flex;flex-direction:column;gap:10px}
+  .dg{border:1px solid var(--border-subtle);border-radius:var(--r-lg);background:rgba(127,127,127,.035);overflow:hidden;animation:rise .34s var(--ease) both}
+  .dg>summary{list-style:none;cursor:pointer;padding:13px 14px;display:flex;align-items:center;gap:11px}
+  .dg>summary::-webkit-details-marker{display:none}
+  .dg .no{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:var(--accent-hi);background:rgba(94,106,210,.14);border:1px solid rgba(94,106,210,.26);border-radius:7px;padding:3px 7px;flex:none}
+  .dg .head{flex:1;min-width:0}
+  .dg .when{font-size:13.5px;font-weight:500;color:var(--text)}
+  .dg .meta{font-size:11.5px;color:var(--muted);margin-top:3px;font-family:'JetBrains Mono',monospace}
+  .dg .chev{color:var(--faint);font-size:15px;transition:transform .18s var(--ease)}
+  .dg[open] .chev{transform:rotate(90deg)}
+  .dg .body{padding:2px 15px 16px;border-top:1px solid var(--border-hair);font-size:13.5px;line-height:1.68;color:var(--body)}
+  .dg .body h3{font-size:13px;font-weight:600;color:var(--text);margin:14px 0 5px}
+  .dg .body ul{margin:5px 0 5px 18px}
+  .dg .body li{margin:3px 0}
+  .dg .body p{margin:7px 0}
+  .dg .body b,.dg .body strong{color:var(--text);font-weight:600}
+  .dg .body code{font-family:'JetBrains Mono',monospace;font-size:12px;background:rgba(127,127,127,.14);padding:1px 5px;border-radius:5px}
+
+  /* ---------- misc ---------- */
+  .foot{display:flex;align-items:center;gap:7px;padding-top:12px;border-top:1px solid var(--border-hair);margin-top:auto}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--faint);opacity:.45;flex:none;transition:background .3s,opacity .3s}
+  .dot.on{background:var(--ok);opacity:1}
+  .foot span{font-size:11px;color:var(--faint)}
+  .empty{padding:40px 16px;text-align:center;border:1px dashed var(--border-subtle);border-radius:var(--r-lg);color:var(--faint);font-size:12.5px;line-height:1.6}
+  .skeleton{height:78px;border-radius:var(--r-lg);background:linear-gradient(90deg,rgba(127,127,127,.07),rgba(127,127,127,.14),rgba(127,127,127,.07));background-size:200% 100%;animation:sh 1.4s linear infinite}
+  @keyframes sh{to{background-position:-200% 0}}
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="shell">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">📖</div>
+      <div>
+        <h1>Sổ Tay Nhóm</h1>
+        <p id="subtitle">Tóm tắt cuộc nói chuyện · riêng tư trong nhóm</p>
+      </div>
+    </div>
+    <div class="you" id="you" hidden></div>
+  </header>
+
+  <section class="gate" id="gate" hidden>
+    <div class="big" id="gateIcon">🔒</div>
+    <h2 id="gateTitle">Chỉ thành viên nhóm mới xem được</h2>
+    <p id="gateText">Mở app này từ trong nhóm chat nhé.</p>
+    <button id="gateBtn" hidden>Đóng</button>
+  </section>
+
+  <div class="label-row" id="listLabel" hidden>
+    <span class="overline">Các kỳ tóm tắt</span>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <div class="empty" id="empty" hidden></div>
+
+  <footer class="foot">
+    <span class="dot" id="dot"></span>
+    <span id="status">Đang khởi động…</span>
+  </footer>
+
+</main>
+
+<script>
+/* ============================================================
+ * Sổ Tay Nhóm — tóm tắt hội thoại nhóm, chỉ thành viên xem được
+ * ------------------------------------------------------------
+ * Dữ liệu do cron job của Hermes ghi vào Firestore mỗi khi nhóm
+ * tích đủ 100 tin nhắn mới.
+ * Cổng vào: chỉ cho mở khi Telegram báo đúng chat_id của nhóm.
+ * ============================================================ */
+const GROUP_ID   = '-1001769279835';
+const GROUP_NAME = '6 thằng già không ngồi chung có 1 thằng VinGroup';
+const APP_PATH   = 'games/group-digest/scores';     // Firestore: games/{appId}/scores
+
+const FS_BASE = 'https://firestore.googleapis.com/v1/projects/taichinhcanhan-9fcf2/databases/(default)/documents';
+const FS_KEY  = 'AIzaSyATvxstwU8NM81b8osYBDwmtcL9zAQfdhk';
+
+const tg     = window.Telegram && window.Telegram.WebApp;
+const inTg   = !!(tg && tg.platform && tg.platform !== 'unknown');
+const user   = (inTg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+const chat   = (inTg && tg.initDataUnsafe && tg.initDataUnsafe.chat) || null;
+
+if (inTg) {
+  tg.ready(); tg.expand();
+  try { tg.setHeaderColor('#08090a'); tg.setBackgroundColor('#08090a'); } catch (e) {}
+  if (tg.onEvent) tg.onEvent('themeChanged', () => {
+    document.documentElement.setAttribute('data-theme', tg.colorScheme === 'light' ? 'light' : 'dark');
+  });
+  document.documentElement.setAttribute('data-theme', tg.colorScheme === 'light' ? 'light' : 'dark');
+}
+
+const $ = id => document.getElementById(id);
+
+/* ---------------- cổng vào: chỉ thành viên nhóm ---------------- */
+/* initData do Telegram ký, client không tự đặt được. Ta đòi đúng chat của nhóm. */
+const fromGroup = !!(chat && String(chat.id) === GROUP_ID);
+const chatKey   = chat ? String(chat.id) : (fromGroup ? GROUP_ID : '');
+
+if (!fromGroup) {
+  $('gate').hidden = false;
+  $('status').textContent = inTg ? 'Đang chạy trên Telegram' : 'Đang chạy trên trình duyệt';
+  $('status').style.opacity = '1';
+  $('gateText').textContent = inTg
+    ? 'App này gắn với chat nhóm "' + GROUP_NAME + '". Bạn đang mở từ ' +
+      (chat ? ('chat ' + (chat.title || chat.type)) : 'ngoài nhóm') +
+      ' nên không xem được nội dung.'
+    : 'App chỉ mở được trong Telegram, từ bên trong nhóm chat.';
+  if (inTg) { $('gateBtn').hidden = false; $('gateBtn').onclick = () => { try { tg.close(); } catch (e) {} }; }
+} else {
+  start();
+}
+
+/* ---------------- hiển thị người xem ---------------- */
+function renderYou() {
+  if (!user) return;
+  const el = $('you');
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || 'Bạn';
+  el.hidden = false;
+  el.innerHTML = (user.photo_url ? '<img src="' + user.photo_url + '" alt="">'
+                 : '<span class="pip">' + name.charAt(0).toUpperCase() + '</span>') + '<span></span>';
+  el.querySelector('span:last-child').textContent = name;
+}
+
+function start() {
+  renderYou();
+  $('subtitle').textContent = GROUP_NAME;
+  $('status').textContent = 'Đang tải sổ tay…';
+  ['skeleton','skeleton','skeleton'].forEach(() => {
+    const d = document.createElement('div'); d.className = 'skeleton'; $('list').appendChild(d);
+  });
+  load();
+  setInterval(load, 60000);
+}
+
+/* ---------------- Firestore ---------------- */
+function val(f, k) {
+  const v = f[k];
+  if (!v) return null;
+  if (v.stringValue   !== undefined) return v.stringValue;
+  if (v.integerValue  !== undefined) return parseInt(v.integerValue, 10);
+  if (v.doubleValue   !== undefined) return Number(v.doubleValue);
+  if (v.timestampValue!== undefined) return v.timestampValue;
+  if (v.booleanValue  !== undefined) return v.booleanValue;
+  return null;
+}
+
+async function fetchDigests() {
+  const url = FS_BASE + '/' + APP_PATH + '?key=' + FS_KEY + '&pageSize=100&orderBy=score%20desc';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return (data.documents || []).map(doc => {
+    const f = doc.fields || {};
+    return {
+      n: val(f, 'score') || 0,
+      title: val(f, 'title') || ('Kỳ #' + (val(f, 'score') || 0)),
+      text: val(f, 'text') || '',
+      fromTs: val(f, 'fromTs'), toTs: val(f, 'toTs'),
+      msgs: val(f, 'msgCount') || 0,
+      chatTitle: val(f, 'chatTitle') || GROUP_NAME
+    };
+  }).filter(d => d.text).sort((a, b) => b.n - a.n);
+}
+
+/* ---------------- render ---------------- */
+function fmtRange(a, b) {
+  const opt = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
+  const f = t => { try { return new Date(t).toLocaleString('vi-VN', opt); } catch (e) { return '?'; } };
+  return f(a) + ' → ' + f(b);
+}
+
+/* markdown tối giản: **bold**, *italic*, `code`, gạch đầu dòng, tiêu đề ### */
+function md(s) {
+  const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const lines = esc.split(/\r?\n/);
+  let out = '', inUl = false;
+  const inline = t => t
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (!l) { if (inUl) { out += '</ul>'; inUl = false; } continue; }
+    if (/^#{1,4}\s+/.test(l)) {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      out += '<h3>' + inline(l.replace(/^#{1,4}\s+/, '')) + '</h3>';
+    } else if (/^[-*•]\s+/.test(l)) {
+      if (!inUl) { out += '<ul>'; inUl = true; }
+      out += '<li>' + inline(l.replace(/^[-*•]\s+/, '')) + '</li>';
+    } else {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      out += '<p>' + inline(l) + '</p>';
+    }
+  }
+  if (inUl) out += '</ul>';
+  return out;
+}
+
+let lastCount = -1;
+
+async function load() {
+  try {
+    const rows = await fetchDigests();
+    $('dot').classList.add('on');
+    $('status').textContent = 'Đã cập nhật · ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    if (!rows.length) {
+      $('list').innerHTML = '';
+      $('empty').hidden = false;
+      $('empty').textContent = 'Chưa có kỳ tóm tắt nào. Sổ sẽ tự ghi khi nhóm tích đủ 100 tin nhắn mới.';
+      $('listLabel').hidden = true;
+      return;
+    }
+    $('empty').hidden = true;
+    $('listLabel').hidden = false;
+    $('count').textContent = String(rows.length).padStart(2, '0') + ' kỳ';
+    if (rows.length === lastCount) return;
+    lastCount = rows.length;
+    $('list').innerHTML = rows.map((d, i) => (
+      '<details class="dg"' + (i === 0 ? ' open' : '') + '>' +
+        '<summary>' +
+          '<span class="no">#' + d.n + '</span>' +
+          '<span class="head"><span class="when">' + esc(d.title) + '</span>' +
+            '<span class="meta">' + fmtRange(d.fromTs, d.toTs) + ' · ' + d.msgs + ' tin</span></span>' +
+          '<span class="chev">›</span>' +
+        '</summary>' +
+        '<div class="body">' + md(d.text) + '</div>' +
+      '</details>'
+    )).join('');
+  } catch (e) {
+    $('dot').classList.remove('on');
+    $('status').textContent = 'Không tải được: ' + e.message;
+    if (lastCount < 0) {
+      $('list').innerHTML = '';
+      $('empty').hidden = false;
+      $('empty').textContent = 'Không kết nối được máy chủ dữ liệu. Kéo lại sau ít phút nhé.';
+    }
+  }
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+</script>
+</body>
+</html>
