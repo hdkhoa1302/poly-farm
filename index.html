@@ -325,7 +325,7 @@ const APPS = [
     icon: 'book-open',
     tint: 232,
     ink: 66,
-    desc: 'Tóm tắt hội thoại nhóm mỗi 100 tin — chỉ thành viên nhóm xem được',
+    desc: 'Tóm tắt mỗi 100 tin nhắn nhóm — chỉ thành viên xem',
     path: 'so-tay-nhom/',
     url: 'https://hdkhoa1302.github.io/poly-farm/so-tay-nhom/'
   }
@@ -496,13 +496,20 @@ async function openApp(app) {
 })();
 
 /* ---------------- status ---------------- */
+/* chẩn đoán: máy này Telegram truyền cho Hub những gì */
+try {
+  const ci = (tg && tg.initData) ? tg.initData.length : 0;
+  const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+  document.getElementById('status').dataset.diag =
+    'plat=' + (tg ? (tg.platform || '?') : 'no-tg') + ' · initData=' + ci + ' · start=' + (sp || '-');
+} catch (e) {}
 const dot = document.getElementById('dot');
 const status = document.getElementById('status');
 if (inTg) {
   dot.classList.add('on');
-  status.textContent = 'Đang chạy trong Telegram';
+  status.textContent = 'Đang chạy trong Telegram · ' + (status.dataset.diag || '');
 } else {
-  status.textContent = 'Đang chạy trên trình duyệt';
+  status.textContent = 'Ngoài Telegram · ' + (status.dataset.diag || '');
 }
 </script>
 </body>

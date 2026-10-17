@@ -104,6 +104,7 @@
     <h2 id="gateTitle">Chỉ thành viên nhóm mới xem được</h2>
     <p id="gateText">Mở app này từ trong nhóm chat nhé.</p>
     <button id="gateBtn" hidden>Đóng</button>
+    <div id="diag" style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--faint);line-height:1.7;word-break:break-all"></div>
   </section>
 
   <div class="label-row" id="listLabel" hidden>
@@ -202,9 +203,25 @@ function showGate(kind, who) {
   }
 }
 
+function diag(extra) {
+  const el = $('diag');
+  if (!el) return;
+  const ci = tg && tg.initData ? tg.initData.length : 0;
+  el.textContent = [
+    'plat=' + (tg ? (tg.platform || '?') : 'no-tg'),
+    'initData=' + ci,
+    't=' + (TOKEN ? TOKEN.slice(0, 6) + '…' : 'không có'),
+    'chat=' + (chat ? chat.id + '/' + chat.type : '-'),
+    'user=' + (user ? user.id : '-'),
+    'href=' + location.href.replace(/^https:\/\//, '').slice(0, 70),
+    extra || ''
+  ].filter(Boolean).join(' · ');
+}
+
 (async function boot() {
   const t = await ticketCheck();
-  if (t.ok) start(t.who); else showGate(t.why, t.who);
+  if (t.ok) start(t.who);
+  else { showGate(t.why, t.who); diag('why=' + t.why); }
 })();
 
 /* ---------------- hiển thị người xem ---------------- */
