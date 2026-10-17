@@ -272,12 +272,19 @@ function renderYou(who) {
 }
 
 /* ---------------- định dạng ---------------- */
+/* Epoch từ Worker là GIÂY; `new Date()` cần MILI-GIÂY → quy đổi cho chắc
+   (nhận cả hai: giá trị lớn là mili-giây rồi, khỏi nhân thêm). */
+function toMs(t) {
+  const v = Number(t) || 0;
+  return v > 1e12 ? v : v * 1000;
+}
+
 function fmtRange(a, b) {
   const opt = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
-  const f = t => { try { return new Date(t).toLocaleString('vi-VN', opt); } catch (e) { return '?'; } };
+  const f = t => { try { return new Date(toMs(t)).toLocaleString('vi-VN', opt); } catch (e) { return '?'; } };
   if (a && b) {
     try {
-      const da = new Date(a), db = new Date(b);
+      const da = new Date(toMs(a)), db = new Date(toMs(b));
       // Cùng ngày → bỏ phần ngày lặp lại: "01-01 18:00 → 20:00"
       // (trên màn hẹp, dạng đầy đủ sẽ bị ellipsis cắt mất giờ kết thúc)
       if (da.toDateString() === db.toDateString()) {
