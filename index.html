@@ -69,7 +69,8 @@
   .foot{margin-top:auto}
 
   /* ---------- top bar ---------- */
-  .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  /* margin-top:auto + .foot{margin-top:auto} → khối nội dung cân giữa vùng trên footer */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
 
   .brand{display:flex;align-items:center;gap:10px;min-width:0}
 
@@ -165,7 +166,7 @@
   }
   .dot{width:5px;height:5px;border-radius:50%;background:var(--faint);flex:none;transition:background .3s}
   .dot.on{background:var(--ok)}
-  .foot span{font-size:11px;color:var(--faint)}
+  .foot span{font-size:11px;color:var(--muted)}
 
   /* ---------- motion ---------- */
   @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
