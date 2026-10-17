@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS requests (
 
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests (status, created_at DESC);
 
+-- App bị CHỦ SỞ HỮU xoá khỏi Hub (xoá mềm: Hub tự lọc, còn khôi phục được).
+CREATE TABLE IF NOT EXISTS deleted_apps (
+  app_id     TEXT    PRIMARY KEY,
+  deleted_at INTEGER NOT NULL DEFAULT 0,
+  deleted_by INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS scores (
   app_id     TEXT    NOT NULL,
   player_id  TEXT    NOT NULL,

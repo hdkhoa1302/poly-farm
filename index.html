@@ -244,6 +244,47 @@
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
   }
+
+  /* ---------------- quản lý app: ẩn · kéo thả · xoá ---------------- */
+  .tools{display:flex;align-items:center;gap:6px;flex:none}
+  .tbtn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;
+        border:1px solid var(--border-subtle);background:rgba(127,127,127,.07);color:var(--body);
+        font:inherit;font-size:11.5px;font-weight:500;cursor:pointer;flex:none;
+        transition:background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
+  .tbtn svg{width:14px;height:14px;display:block}
+  .tbtn:hover{background:rgba(127,127,127,.14);border-color:var(--border);color:var(--text)}
+  .tbtn.on{background:var(--accent);border-color:transparent;color:#fff}
+  .chip{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:9999px;
+        border:1px solid var(--border-subtle);background:rgba(127,127,127,.06);color:var(--muted);
+        font:inherit;font-size:11.5px;cursor:pointer;flex:none;
+        transition:color .15s var(--ease),border-color .15s var(--ease)}
+  .chip svg{width:13px;height:13px;display:block}
+  .chip:hover{color:var(--text);border-color:var(--border)}
+
+  /* tay cầm kéo + nút tác vụ: chỉ hiện khi bật chế độ Sửa */
+  .drag,.act{display:none;flex:none;place-items:center;padding:0;border-radius:7px}
+  body.manage .drag,body.manage .act{display:grid}
+  .drag{width:24px;height:28px;color:var(--faint);cursor:grab;touch-action:none}
+  .drag svg{width:15px;height:15px;display:block}
+  .drag:active{cursor:grabbing;color:var(--body)}
+  .act{width:28px;height:28px;border:1px solid var(--border-subtle);background:rgba(127,127,127,.06);color:var(--muted);cursor:pointer}
+  .act svg{width:15px;height:15px;display:block}
+  .act:hover{color:var(--text);border-color:var(--border);background:rgba(127,127,127,.14)}
+  .act.del:hover{color:#ff6b6b;border-color:rgba(255,107,107,.45);background:rgba(255,107,107,.12)}
+
+  /* trong chế độ Sửa: không mở app, không nhích sang phải */
+  body.manage .app{cursor:default}
+  body.manage .app:hover{transform:none}
+  body.manage .app:active{transform:none}
+  body.manage .app .chev{display:none}
+  /* animation `rise` có fill-mode "both" nên trạng thái cuối (opacity:1) sẽ ĐÈ
+     lên opacity của app bị ẩn → phải tắt animation cho hàng đang ẩn/kéo */
+  .app.hidden-app{opacity:.45;animation:none}
+  .app.hidden-app .name{text-decoration:line-through;text-decoration-color:var(--faint)}
+  .app.dragging{position:relative;z-index:5;border-color:var(--accent-hi);
+                background:var(--row-hover);box-shadow:0 14px 30px rgba(0,0,0,.4);animation:none}
+  .app.dragging .drag{cursor:grabbing;color:var(--accent-hi)}
+  .no-anim .app{animation:none}
 </style>
 </head>
 <body>
@@ -262,7 +303,15 @@
 
   <div class="label-row">
     <span class="overline">Ứng dụng</span>
-    <span class="count" id="count"></span>
+    <div class="tools">
+      <span class="count" id="count"></span>
+      <button class="chip" id="showAll" type="button" hidden>
+        <i data-icon="eye" data-size="13"></i><span id="showAllLabel"></span>
+      </button>
+      <button class="tbtn" id="manage" type="button">
+        <i data-icon="sliders-horizontal" data-size="14"></i><span id="manageLabel">Sửa</span>
+      </button>
+    </div>
   </div>
 
   <div class="apps" id="app-list"></div>
@@ -379,34 +428,221 @@ if (inTg && tg.onEvent) {
   el.querySelector('span:last-child').textContent = p.name;
 })();
 
-/* ---------------- render apps ---------------- */
+/* ---------------- ẩn · thứ tự · xoá app ----------------
+ * Ẩn và sắp xếp là chuyện RIÊNG từng máy → để trong localStorage, không cần
+ * server, không ảnh hưởng ai. Xoá là chuyện CHUNG → Worker (chỉ chủ sở hữu),
+ * Hub đọc danh sách đã xoá rồi tự lọc.
+ */
+const API = 'https://games-hub-api.hdkhoa1302.workers.dev';
+const OWNER_ID = 780469718;            // chỉ user này thấy nút xoá (Worker kiểm lại)
+const LS_HIDDEN = 'hub_hidden_v1';
+const LS_ORDER = 'hub_order_v1';
+
 const list = document.getElementById('app-list');
 const empty = document.getElementById('empty');
-document.getElementById('count').textContent = String(APPS.length);
 
-if (!APPS.length) {
-  empty.hidden = false;
-  empty.style.animation = 'none';
-} else {
-  APPS.forEach(app => {
+const myId = () => (inTg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || null;
+const isAdmin = () => myId() === OWNER_ID;
+const myInit = () => (inTg && tg.initData) || '';
+function setStatus(t) { const s = document.getElementById('status'); if (s) s.textContent = t; }
+
+function lsSet(k) { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return new Set(Array.isArray(v) ? v : []); } catch (e) { return new Set(); } }
+function lsArr(k) { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function lsSave(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+let hidden = lsSet(LS_HIDDEN);   // app người dùng tự ẩn (chỉ máy này)
+let order = lsArr(LS_ORDER);     // thứ tự người dùng tự kéo (chỉ máy này)
+let gone = new Set();            // app chủ sở hữu đã xoá (mọi người)
+let manage = false;              // đang ở chế độ Sửa
+let showAll = false;             // đang cho hiện cả app bị ẩn
+let renderCount = 0;             // để animation chỉ chạy lần vẽ đầu
+
+/* Thứ tự hiệu dụng: theo `order`; app MỚI (chưa có trong order) đẩy lên đầu
+   để không bị bỏ sót ở cuối danh sách. */
+function orderedApps() {
+  const vis = APPS.filter(a => !gone.has(a.id));
+  const pos = new Map(order.map((id, i) => [id, i]));
+  return vis.map((a, i) => ({ a, i, k: pos.has(a.id) ? pos.get(a.id) : null }))
+    .sort((x, y) => {
+      if (x.k === null && y.k === null) return x.i - y.i;
+      if (x.k === null) return -1;
+      if (y.k === null) return 1;
+      return x.k - y.k;
+    }).map(o => o.a);
+}
+
+function render() {
+  const apps = orderedApps();
+  list.innerHTML = '';
+
+  apps.forEach(app => {
+    const isHidden = hidden.has(app.id);
+    // chế độ Sửa hiện TẤT CẢ (kể cả đang ẩn) để còn kéo/xếp được hết
+    if (isHidden && !showAll && !manage) return;
+
     const btn = document.createElement('button');
-    btn.className = 'app';
+    btn.className = 'app' + (isHidden ? ' hidden-app' : '');
     btn.type = 'button';
     btn.dataset.id = app.id;
     if (app.tint != null) btn.style.setProperty('--tint', app.tint);
     if (app.ink != null) btn.style.setProperty('--app-ink', app.ink + '%');
     if (app.inkLight != null) btn.style.setProperty('--app-ink-light', app.inkLight + '%');
+
     btn.innerHTML =
+      `<span class="drag" title="Kéo để sắp xếp"><i data-icon="grip-vertical" data-size="15"></i></span>` +
       `<span class="ico"><i data-icon="${app.icon}" data-size="22"></i></span>` +
       `<span class="meta"><span class="name"></span><span class="desc"></span></span>` +
+      `<span class="act hv" title="${isHidden ? 'Hiện lại' : 'Ẩn app này'}">` +
+        `<i data-icon="${isHidden ? 'eye' : 'eye-off'}" data-size="15"></i></span>` +
+      (isAdmin() ? `<span class="act del" title="Xoá khỏi Hub — áp dụng cho mọi người">` +
+        `<i data-icon="trash-2" data-size="15"></i></span>` : '') +
       `<span class="chev"><i data-icon="chevron-right" data-size="16"></i></span>`;
+
     btn.querySelector('.name').textContent = app.name;
     btn.querySelector('.desc').textContent = app.desc;
-    btn.addEventListener('click', () => openApp(app));
+
+    btn.addEventListener('click', (e) => {
+      if (!manage) { openApp(app); return; }                  // chế độ thường: mở app
+      if (e.target.closest('.act.hv')) { toggleHide(app.id); return; }
+      if (e.target.closest('.act.del')) { wipeApp(app, e.target.closest('.act.del')); return; }
+    });
     list.appendChild(btn);
   });
-  if (window.Icons) Icons.hydrate(list);   // vẽ icon SVG
+
+  if (window.Icons) Icons.hydrate(list);
+  // animation `rise` chỉ nên chạy ở lần vẽ ĐẦU; nếu không, mỗi lần ẩn/hiện một
+  // app là cả danh sách nhấp nháy lại
+  if (++renderCount > 1) list.classList.add('no-anim');
+
+  const nHidden = APPS.filter(a => hidden.has(a.id) && !gone.has(a.id)).length;
+  document.getElementById('count').textContent = String(apps.length);
+  empty.hidden = apps.length > 0;
+  if (!apps.length) empty.style.animation = 'none';
+
+  const chip = document.getElementById('showAll');
+  chip.hidden = !(nHidden > 0) || manage;
+  document.getElementById('showAllLabel').textContent =
+    showAll ? 'Ẩn bớt' : ('Hiện tất cả (' + nHidden + ')');
+  chip.querySelector('i').setAttribute('data-icon', showAll ? 'eye-off' : 'eye');
+
+  const mb = document.getElementById('manage');
+  mb.classList.toggle('on', manage);
+  document.getElementById('manageLabel').textContent = manage ? 'Xong' : 'Sửa';
+  mb.querySelector('i').setAttribute('data-icon', manage ? 'check' : 'sliders-horizontal');
+
+  document.body.classList.toggle('manage', manage);
+  if (window.Icons) { Icons.hydrate(chip); Icons.hydrate(mb); }
 }
+
+/* ---------------- ẩn / hiện ---------------- */
+function toggleHide(id) {
+  if (hidden.has(id)) hidden.delete(id); else hidden.add(id);
+  lsSave(LS_HIDDEN, [...hidden]);
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch (e) {} }
+  render();
+}
+
+/* ---------------- xoá (chỉ chủ sở hữu) ---------------- */
+async function wipeApp(app, el) {
+  if (!confirm('Xoá "' + app.name + '" khỏi Hub cho MỌI người?')) return;
+  el.style.opacity = '.4';
+  try {
+    const r = await fetch(API + '/apps/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: myInit(), id: app.id })
+    });
+    if (!r.ok) {
+      el.style.opacity = '';
+      setStatus(r.status === 403 ? 'Không xoá được — chỉ chủ sở hữu.' : 'Không xoá được (lỗi ' + r.status + ').');
+      return;
+    }
+    gone.add(app.id);
+  } catch (e) {
+    el.style.opacity = '';
+    setStatus('Không xoá được — mạng lỗi.');
+    return;
+  }
+  setStatus('Đã xoá "' + app.name + '" khỏi Hub.');
+  render();
+}
+
+async function loadDeleted() {
+  try {
+    const r = await fetch(API + '/apps');
+    if (r.ok) gone = new Set((await r.json()).deleted || []);
+  } catch (e) { /* offline: dùng danh sách mặc định */ }
+  render();
+}
+
+/* ---------------- kéo thả sắp xếp ----------------
+ * Pointer Events để chạy cả cảm ứng lẫn chuột. Trong lúc kéo, hàng dịch bằng
+ * transform và được CHÈN LẠI vào DOM khi vượt qua trung điểm hàng khác — cách
+ * này không cần bù trừ toạ độ phức tạp, và vị trí đo lại luôn đúng.
+ */
+let dragState = null;
+
+list.addEventListener('pointerdown', (e) => {
+  if (!manage) return;
+  const handle = e.target.closest('.drag');
+  if (!handle) return;
+  const row = handle.closest('.app');
+  if (!row) return;
+  e.preventDefault();
+  dragState = {
+    row, pid: e.pointerId, ty: 0,
+    grab: e.clientY - row.getBoundingClientRect().top,
+  };
+  row.classList.add('dragging');
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (err) {} }
+  try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+});
+
+list.addEventListener('pointermove', (e) => {
+  if (!dragState || e.pointerId !== dragState.pid) return;
+  e.preventDefault();
+  const row = dragState.row;
+  const y = e.clientY - dragState.grab;          // top mong muốn của hàng
+  const h = row.offsetHeight;
+
+  const others = [...list.querySelectorAll('.app')].filter(r => r !== row);
+  let target = null;
+  for (const r of others) {
+    const b = r.getBoundingClientRect();
+    if (y + h / 2 < b.top + b.height / 2) { target = r; break; }
+  }
+  if (row.nextElementSibling !== target) list.insertBefore(row, target);
+
+  // bỏ transform cũ ra khỏi phép đo rồi mới tính lại
+  const natural = row.getBoundingClientRect().top - dragState.ty;
+  dragState.ty = y - natural;
+  row.style.transform = 'translateY(' + dragState.ty + 'px)';
+});
+
+function endDrag(e) {
+  if (!dragState) return;
+  if (e && e.pointerId !== undefined && e.pointerId !== dragState.pid) return;
+  dragState.row.style.transform = '';
+  dragState.row.classList.remove('dragging');
+  dragState = null;
+  // lưu đúng thứ tự đang thấy; app không nằm trong danh sách (đã xoá) giữ ở cuối
+  const seen = [...list.querySelectorAll('.app')].map(r => r.dataset.id);
+  order = seen.concat(APPS.map(a => a.id).filter(id => !seen.includes(id)));
+  lsSave(LS_ORDER, order);
+  render();
+}
+list.addEventListener('pointerup', endDrag);
+list.addEventListener('pointercancel', endDrag);
+
+document.getElementById('showAll').addEventListener('click', () => { showAll = !showAll; render(); });
+document.getElementById('manage').addEventListener('click', () => {
+  manage = !manage; showAll = false;
+  if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
+  render();
+});
+
+render();
+loadDeleted();
 
 /* ---------------- mở app ---------------- */
 /* Khi nhảy sang trang con trong cùng webview, URL mất phần hash launch params
@@ -444,7 +680,7 @@ async function openApp(app) {
   const sp = (inTg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
           || new URLSearchParams(location.search).get('startapp');
   if (!sp) return;
-  const app = APPS.find(a => a.id === sp);
+  const app = orderedApps().find(a => a.id === sp);   // bỏ qua app đã bị xoá
   if (app) setTimeout(() => openApp(app), 300);
 })();
 

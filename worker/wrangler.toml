@@ -3,8 +3,10 @@ main = "src/index.js"
 compatibility_date = "2025-01-01"
 
 # Group Telegram được phép đọc Sổ Tay (khớp chat.id trong initData)
+# OWNER_ID: chỉ user này được xoá/khôi phục app trong Hub
 [vars]
 GROUP_ID = "-1001769279835"
+OWNER_ID = "780469718"
 
 # Điền database_id sau khi chạy: wrangler d1 create games-hub
 [[d1_databases]]

@@ -21,6 +21,9 @@
  *   GET  /request?initData=…     -> trạng thái + có được xin hay không
  *   GET  /lb/:appId              -> [{name,username,photo,score,pid}]
  *   POST /lb/:appId              (body JSON có initData) -> upsert điểm
+ *   GET  /apps                   -> {deleted:[appId…]}  (công khai: hub đọc trước khi đăng nhập)
+ *   POST /apps/delete            (body initData + id)   -> chỉ OWNER_ID
+ *   POST /apps/restore           (body initData + id)   -> chỉ OWNER_ID
  *
  * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
  * nên Worker chỉ GHI YÊU CẦU vào hàng đợi; cron ở máy nhặt rồi chạy.
@@ -78,6 +81,10 @@ async function route(request, url, env) {
   if (p === '/request') {
     return request.method === 'POST' ? askForDigest(request, env) : requestState(request, url, env);
   }
+
+  if (p === '/apps') return listDeleted(env);
+  if (p === '/apps/delete' && request.method === 'POST') return deleteApp(request, env);
+  if (p === '/apps/restore' && request.method === 'POST') return restoreApp(request, env);
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -385,4 +392,51 @@ async function submitScore(request, env, appId) {
   ).bind(appId, 'tg_' + u.id).first();
 
   return json({ ok: true, best: row ? row.score : score, isRecord: row && row.score === score });
+}
+
+/* --------------------------------------------------------- quản lý app */
+/**
+ * Xoá app khỏi Hub cho MỌI người (chỉ chủ sở hữu). Xoá MỀM: chỉ ghi vào
+ * deleted_apps để Hub tự lọc và còn khôi phục được. File của app vẫn nằm
+ * trong repo — muốn xoá hẳn thì xoá thư mục rồi push.
+ */
+async function listDeleted(env) {
+  const { results } = await env.DB.prepare('SELECT app_id FROM deleted_apps').all();
+  return json({ ok: true, deleted: (results || []).map((r) => r.app_id) });
+}
+
+/** Xác minh chữ ký + đúng là chủ sở hữu, rồi trả về app id đã kiểm. */
+async function adminBody(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return { err: json({ error: 'bad json' }, 400) }; }
+
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v) return { err: json({ error: 'bad-signature' }, 403) };
+  if (v.expired) return { err: json({ error: 'expired' }, 403) };
+
+  const uid = v.user && v.user.id;
+  if (!uid || String(uid) !== String(env.OWNER_ID)) {
+    return { err: json({ error: 'not-admin' }, 403) };
+  }
+  const id = String(b.id || '').trim().slice(0, 40);
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return { err: json({ error: 'bad app id' }, 400) };
+  return { id, uid };
+}
+
+async function deleteApp(request, env) {
+  const r = await adminBody(request, env);
+  if (r.err) return r.err;
+  await env.DB.prepare(
+    `INSERT INTO deleted_apps (app_id,deleted_at,deleted_by) VALUES (?,?,?)
+     ON CONFLICT(app_id) DO UPDATE SET
+       deleted_at=excluded.deleted_at, deleted_by=excluded.deleted_by`
+  ).bind(r.id, Math.floor(Date.now() / 1000), r.uid).run();
+  return json({ ok: true, deleted: r.id });
+}
+
+async function restoreApp(request, env) {
+  const r = await adminBody(request, env);
+  if (r.err) return r.err;
+  await env.DB.prepare('DELETE FROM deleted_apps WHERE app_id = ?').bind(r.id).run();
+  return json({ ok: true, restored: r.id });
 }
