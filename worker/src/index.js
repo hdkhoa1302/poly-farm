@@ -520,7 +520,7 @@ function plotOrigin(plot) {
 async function worldState(env) {
   const now = Math.floor(Date.now() / 1000);
   const mem = await env.DB.prepare(
-    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits,pos_x,pos_z,look
+    `SELECT user_id,name,username,photo,hue,plot,first_seen,last_seen,visits,pos_x,pos_z,pos_y,look
        FROM world_members ORDER BY plot`
   ).all();
   const blk = await env.DB.prepare(
@@ -541,6 +541,7 @@ async function worldState(env) {
       look: m.look || '',                            // "áo,quần,da,tóc,kiểu tóc,mũ"
       firstSeen: m.first_seen, lastSeen: m.last_seen, visits: m.visits,
       posX: m.pos_x == null ? null : m.pos_x, posZ: m.pos_z == null ? null : m.pos_z,
+      posY: m.pos_y == null ? null : m.pos_y,
       asleep: (now - m.last_seen) > SLEEP_SEC,
       blocks: byUser[m.user_id] || [],
     })),
@@ -555,7 +556,7 @@ async function worldState(env) {
 async function worldLive(env) {
   const now = Math.floor(Date.now() / 1000);
   const mem = await env.DB.prepare(
-    `SELECT user_id,pos_x,pos_z,last_seen FROM world_members`
+    `SELECT user_id,pos_x,pos_z,pos_y,last_seen FROM world_members`
   ).all();
   const rev = await env.DB.prepare(
     `SELECT COALESCE(MAX(at),0) AS m, COUNT(*) AS c FROM world_blocks`
@@ -567,7 +568,7 @@ async function worldLive(env) {
     rev: (rev ? rev.m : 0) * 100000 + ((rev ? rev.c : 0) % 100000),
     members: (mem.results || []).map((m) => ({
       id: m.user_id,
-      x: m.pos_x, z: m.pos_z,
+      x: m.pos_x, z: m.pos_z, y: m.pos_y,
       seen: m.last_seen,
       asleep: (now - m.last_seen) > SLEEP_SEC,
     })),
@@ -595,6 +596,9 @@ async function worldJoin(request, env) {
   // vị trí gửi kèm (khi đang đi lại) — chỉ nhận nếu hợp lệ và nằm trong thế giới
   const hasPos = Number.isFinite(Number(b.x)) && Number.isFinite(Number(b.z));
   const px = hasPos ? Math.round(Number(b.x) * 100) / 100 : null;
+  /* Cao độ cũng phải đồng bộ: chỉ có x/z thì người khác không biết mình đang
+     đứng trong nhà hay trên mái, và sẽ vẽ mình trên nóc. */
+  const py = b.y == null ? null : Math.round(Number(b.y) * 100) / 100;
   const pz = hasPos ? Math.round(Number(b.z) * 100) / 100 : null;
 
   const ex = await env.DB.prepare('SELECT plot FROM world_members WHERE user_id = ?').bind(uid).first();
@@ -617,19 +621,19 @@ async function worldJoin(request, env) {
       await env.DB.prepare('UPDATE world_members SET last_seen = ? WHERE user_id = ?').bind(now, uid).run();
     } else {
       await env.DB.prepare(
-        'UPDATE world_members SET last_seen = ?, pos_x = ?, pos_z = ? WHERE user_id = ?'
-      ).bind(now, px, pz, uid).run();
+        'UPDATE world_members SET last_seen = ?, pos_x = ?, pos_z = ?, pos_y = COALESCE(?, pos_y) WHERE user_id = ?'
+      ).bind(now, px, pz, py, uid).run();
     }
     return json({ ok: true, joined: true, beat: true, plot: ex.plot });
   }
 
   await env.DB.prepare(
     `UPDATE world_members SET name=?, username=?, photo=?, last_seen=?, visits=visits+1,
-       pos_x = COALESCE(?, pos_x), pos_z = COALESCE(?, pos_z)
+       pos_x = COALESCE(?, pos_x), pos_z = COALESCE(?, pos_z), pos_y = COALESCE(?, pos_y)
       WHERE user_id = ?`
   ).bind(
     ([u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || 'Ai đó').slice(0, 64),
-    u.username || '', u.photo_url || '', now, px, pz, uid
+    u.username || '', u.photo_url || '', now, px, pz, py, uid
   ).run();
   return json({ ok: true, joined: true, plot: ex.plot });
 }

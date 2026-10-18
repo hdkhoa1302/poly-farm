@@ -493,6 +493,31 @@ function bumpCol(x, z) {
 }
 const topAt = (x, z) => colTop.get(colKey(x, z)) || 0;
 
+/* ==================================================================
+ * ĐI ĐỨNG: hỏi theo THỂ TÍCH THÂN NGƯỜI, không hỏi theo đỉnh cột
+ * ------------------------------------------------------------------
+ * topAt() chỉ trả lời "trên nóc cột này cao bao nhiêu". Với một toà nhà,
+ * ô CỬA RA VÀO cũng có khối ở phía trên (lanh tô, mái đua ra), nên
+ * topAt(ô cửa) rất cao — lấy số đó chặn đường thì không vào được nhà, dù
+ * chỗ đứng ngang tầm chân hoàn toàn trống.
+ * Giờ hỏi đúng câu cần hỏi: ở cao độ này thân người có chỗ không.
+ * ================================================================== */
+const HEAD = 1.75;                                   // thân người cao bao nhiêu đơn vị khối
+const solidAt = (x, y, z) => blockMeshes.has(keyOf(x, y, z));
+
+/** mặt đứng được cao nhất KHÔNG cao hơn yMax (mặt dưới chân) */
+function surfaceAt(cx, cz, yMax) {
+  for (let k = Math.floor(yMax + 0.02); k >= 0; k--) if (solidAt(cx, k, cz)) return k + 1;
+  return 0;                                          // không có gì → mặt đất
+}
+
+/** ở cao độ y, thân người có đâm vào khối nào không */
+function bodyFree(cx, cz, y) {
+  const lo = Math.floor(y + 0.02), hi = Math.floor(y + HEAD);
+  for (let k = lo; k <= hi; k++) if (solidAt(cx, k, cz)) return false;
+  return true;
+}
+
 function addBlockMesh(x, y, z, type, owner, obj) {
   const mesh = new THREE.Mesh(BOX, MATS[type] || MATS.grass);
   mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -1255,7 +1280,9 @@ function renderWorld() {
     if (isMe && player.ready) { px = player.x; pz = player.z; }
     else if (m.posX != null && m.posZ != null) { px = m.posX; pz = m.posZ; }
     else { px = ox + Math.floor(PLOT / 2) + 0.5; pz = oz + Math.floor(PLOT / 2) + 0.5; }
-    const top = topAt(Math.floor(px), Math.floor(pz));
+    /* Ưu tiên cao độ máy chủ giữ: người trong nhà phải hiện trong nhà, không
+       phải trên mái. Chưa có (người cũ) thì mới đoán theo đỉnh cột. */
+    const top = m.posY != null ? m.posY : topAt(Math.floor(px), Math.floor(pz));
 
     const p = buildPerson(lookOf(m), asleep);
     p.position.set(px, asleep ? 0.28 : top, pz);
@@ -1566,7 +1593,7 @@ $('home').onclick = () => {
   if (player.ready) {
     player.x = ox + PLOT / 2 + 0.5;
     player.z = oz + PLOT / 2 + 0.5;
-    player.y = player.targetY = topAt(Math.floor(player.x), Math.floor(player.z));
+    player.y = player.targetY = surfaceAt(Math.floor(player.x), Math.floor(player.z), 2);
     camera.position.set(player.x + 11, player.y + 12, player.z + 13);
     savePosSoon();
   }
@@ -1627,7 +1654,7 @@ let posTimer = null, posLast = 0;
 function sendPos() {
   if (!inTg || !initData() || !player.ready) return;
   posLast = Date.now();
-  post('/world/join', { initData: initData(), beat: true, x: player.x, z: player.z });
+  post('/world/join', { initData: initData(), beat: true, x: player.x, y: player.y, z: player.z });
 }
 function savePosSoon() {
   if (!inTg || !initData() || !player.ready) return;
@@ -1650,8 +1677,13 @@ function moveBy(dx, dz) {
   const nx = player.x + dx, nz = player.z + dz;
   const cx = Math.floor(nx), cz = Math.floor(nz);
   if (cx < -10 || cz < -10 || cx > COLS * PLOT + 10 || cz > ROWS * PLOT + 10) return false;
-  const h = topAt(cx, cz);
-  if (h - player.y > (player.grounded ? 1.05 : 1.15)) return false;
+
+  /* Sàn ở ô tới: cao nhất mà mình leo tới được. Đang bay thì leo cao hơn
+     một chút, nhờ vậy nhảy lên được tường 2 tầng. */
+  const stepUp = player.grounded ? 1.05 : 1.15;
+  const floor = surfaceAt(cx, cz, player.y + stepUp);
+  if (floor - player.y > stepUp) return false;        // bậc quá cao
+  if (!bodyFree(cx, cz, floor)) return false;         // chỗ đứng đó bị chắn ngang người
   player.x = nx; player.z = nz;
   return true;
 }
@@ -1744,7 +1776,10 @@ function tick(now) {
   }
   /* ---- trọng lực ---- */
   if (player.ready) {
-    const ground = topAt(Math.floor(player.x), Math.floor(player.z));
+    /* Sàn bám theo cao độ hiện tại, không phải đỉnh cột: đứng trong nhà thì sàn
+       là nền nhà, chứ không phải nóc — nếu không sẽ bị hút lên mái. */
+    const ground = surfaceAt(Math.floor(player.x), Math.floor(player.z),
+                              player.y + (player.grounded ? 1.05 : 1.15));
     player.targetY = ground;
     if (player.grounded) {
       if (ground > player.y + 0.02) {
@@ -1900,7 +1935,7 @@ async function boot() {
   buildPalette();
   renderWorld();
   // giờ mới biết cao độ sàn (colTop vừa được dựng cùng khối)
-  if (player.ready) player.y = player.targetY = topAt(Math.floor(player.x), Math.floor(player.z));
+  if (player.ready) player.y = player.targetY = surfaceAt(Math.floor(player.x), Math.floor(player.z), 2);
   $('veil').hidden = true;
 
   if (MY_PLOT >= 0) {
@@ -2806,6 +2841,7 @@ async function pollLive() {
     if (!o) { needFull = true; continue; }                    // người mới vào
     if (o.asleep !== !!m.asleep) { needFull = true; continue; } // vừa ngủ / vừa thức
     if (m.x != null && m.z != null) { o.tx = m.x; o.tz = m.z; }
+    if (m.y != null) o.base = m.y;                     // đứng trong nhà hay trên mái
   }
   if (local.size !== alive.size) needFull = true;             // có người rời đi
 
@@ -2814,7 +2850,7 @@ async function pollLive() {
 
 if (inTg && initData()) {
   // nhịp sống khi không đi đâu (đứng yên vẫn phải báo là còn thức)
-  setInterval(() => post('/world/join', { initData: initData(), beat: true }), 45000);
+  setInterval(() => post('/world/join', { initData: initData(), beat: true, x: player.x, y: player.y, z: player.z }), 45000);
   // nền tảng: cập nhật vị trí + phát hiện thay đổi
   setInterval(pollLive, 1200);
   setInterval(pollChat, 1800);
