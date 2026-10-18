@@ -2774,7 +2774,7 @@ async function createObject() {
 const chatPanel = $('chatPanel'), chatList = $('chatList'), chatIn = $('chatIn');
 const chatBadge = $('chatBadge');
 let chatLast = 0, chatOpen = false, chatUnread = 0, chatBusy = false, chatReady = false;
-let liveTimer = null, liveOthers = 0, liveMovedAt = 0, lastChatId = null;
+let liveTimer = null, liveOthers = 0, liveBotsDi = 0, liveMovedAt = 0, lastChatId = null;
 const chatSeen = new Set();
 
 /* bong bóng nói trên đầu nhân vật */
@@ -2995,10 +2995,13 @@ async function refreshWorld() {
  * hạn mức của Worker (gói miễn phí 100k lượt/ngày).
  */
 const LIVE_FAST = 400, LIVE_SLOW = 1000, LIVE_ALONE = 1600, LIVE_HIDDEN = 4000;
-/** nhịp chờ kế tiếp (ms). Hàm thuần để kiểm được, không dính đồng hồ. */
-function liveDelay(hidden, others, sinceMove) {
+/** nhịp chờ kế tiếp (ms). Hàm thuần để kiểm được, không dính đồng hồ.
+    `botsDi` = số cá thể của thế giới (Hermes/ZeroBot) đang đi: một mình mà tụi nó
+    đi thì hỏi vừa phải (1 giây) chứ không thưa như lúc cả làng đứng yên — vị trí
+    hiển thị tụt lại sau máy chủ tới 1–3 đơn vị nếu hỏi thưa. */
+function liveDelay(hidden, others, sinceMove, botsDi) {
   if (hidden) return LIVE_HIDDEN;
-  if (others < 1) return LIVE_ALONE;
+  if (others < 1) return botsDi ? LIVE_SLOW : LIVE_ALONE;
   return sinceMove < 5000 ? LIVE_FAST : LIVE_SLOW;
 }
 
@@ -3066,7 +3069,7 @@ if (inTg && initData()) {
   (async function liveLoop() {
     try { await pollLive(); } catch (e) {}
     clearTimeout(liveTimer);
-    liveTimer = setTimeout(liveLoop, liveDelay(document.hidden, liveOthers, Date.now() - liveMovedAt));
+    liveTimer = setTimeout(liveLoop, liveDelay(document.hidden, liveOthers, Date.now() - liveMovedAt, liveBotsDi));
   })();
   setInterval(pollChat, 1800);
   pollChat();
