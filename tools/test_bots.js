@@ -18,7 +18,6 @@ function slice(from, to, name) {
 const SRC_BOTS_STATE = slice('let pals = null;', '/* ==================================================================', 'botState');
 const SRC_WALKER = slice('class Walker {', 'async function spawnWalker() {', 'Walker');
 const SRC_BUILD_PALS = slice('function buildPals() {', 'function ensurePals() {', 'buildPals');
-const SRC_AUTOWALK = slice('function setAutowalk(on) {', "$('walkBtn').onclick", 'setAutowalk');
 const SRC_POLL = slice('async function pollLive() {', '\n\nif (inTg && initData()) {', 'pollLive');
 const SRC_REFRESH = slice('async function refreshWorld() {', '/* ------------------------------------------------------------------ thời gian thực', 'refreshWorld');
 
@@ -82,8 +81,10 @@ function drawBubble() {}
 function topAt() { return 0; }
 function inWorld() { return true; }
 let WORLD = null;
-let autowalk = true;
 const document = { getElementById: () => null };
+/* Không còn nút 🐾 trong app nên chỗ dự phòng luôn đi; mã trong buildPals vẫn đọc
+   biến này, nên bài kiểm phải khai. */
+const autowalk = true;
 let perfTime = 1000;
 const performance = { now: () => perfTime };
 let pass = 0, fail = 0;
@@ -104,10 +105,7 @@ check('pollLive đọc d.bots', SRC_POLL.indexOf('d.bots') >= 0);
 check('refreshWorld đọc w.body.bots', SRC_REFRESH.indexOf('w.body.bots') >= 0);
 
 console.log('');
-console.log('=== 3. hành vi nút 🐾 (walkBtn) ===');
-check('nút 🐾 là hành động cục bộ, không gọi post', SRC_AUTOWALK.indexOf('post(') < 0);
 
-console.log('');
 console.log('=== 4. nội suy theo máy chủ & chế độ nghỉ ===');
 const pInst = buildPals();
 perfTime = 1000;
@@ -134,15 +132,16 @@ for (let i = 0; i < 60; i++) {
 const movedX = robot.position.x;
 check('nội suy tiến tới tx theo speed', movedX > 21.0 && movedX < 24.5, 'x = ' + movedX.toFixed(2));
 
-autowalk = false;
-const freezeX1 = robot.position.x;
+/* Không còn nút 🐾 nữa: hai cá thể luôn đi tiếp theo máy chủ, không đóng băng tại
+   máy mình. Phép kiểm cũ (tắt autowalk thì đứng yên) thay bằng phép kiểm ngược. */
+const keepX1 = robot.position.x;
 for (let i = 0; i < 60; i++) {
   perfTime += 16;
   pInst.update(16, perfTime, { ready: true });
 }
-const freezeX2 = robot.position.x;
-check('tắt autowalk thì đóng băng nội suy (đứng yên)', Math.abs(freezeX2 - freezeX1) < 0.001);
-autowalk = true;
+const keepX2 = robot.position.x;
+check('không còn nút 🐾: hai cá thể vẫn đi tiếp, không đóng băng',
+  keepX2 > keepX1 + 0.1, 'x: ' + keepX1.toFixed(2) + ' -> ' + keepX2.toFixed(2));
 
 updateBots([
   { id: 'hermes', x: 23.0, z: 20, tx: 23.0, tz: 20, speed: 3.0, mode: 'rest', yaw: 0, say: 'Nghỉ chút nhé' }
@@ -223,7 +222,6 @@ process.exit(fail ? 1 : 0);
 const file = path.join(os.tmpdir(), 'thegioi_test_bots.js');
 fs.writeFileSync(file, [
   'const src = ' + JSON.stringify(src) + ';',
-  'const SRC_AUTOWALK = ' + JSON.stringify(SRC_AUTOWALK) + ';',
   'const SRC_POLL = ' + JSON.stringify(SRC_POLL) + ';',
   'const SRC_REFRESH = ' + JSON.stringify(SRC_REFRESH) + ';',
   STUBS,
@@ -235,6 +233,9 @@ fs.writeFileSync(file, [
 
 try {
   execFileSync(process.execPath, [file], { stdio: 'inherit' });
-} finally {
-  fs.unlinkSync(file);
+} catch (e) {
+  console.error('\n--- hỏng: giữ lại file chạy tạm để soi: ' + file);
+  console.error('--- chạy tay:  node ' + file);
+  throw e;
 }
+if (!process.env.GIU_FILE_TAM) fs.unlinkSync(file);

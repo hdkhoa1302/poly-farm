@@ -22,8 +22,10 @@
     font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:-.011em}
   canvas{display:block;width:100%;height:100%;touch-action:none}
 
-  .hud{position:fixed;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 148px 10px 12px;
-       display:flex;align-items:center;gap:9px;pointer-events:none;z-index:5}
+  /* Một hàng duy nhất: [về Hub] [tên app] [công cụ] — không chừa cứng chỗ cho hàng
+     công cụ nữa (trước đây chừa 148px trong khi sáu nút cần ~268px nên đè mất tên). */
+  .hud{position:fixed;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 12px 10px 12px;
+       display:flex;align-items:center;gap:9px;pointer-events:none;z-index:7;flex-wrap:wrap}
   .hud > *{pointer-events:auto}
   .iconbtn{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:10px;
        border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(10px);color:var(--text);
@@ -37,8 +39,15 @@
   .titles b{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .titles span{display:block;font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  .tools{position:fixed;right:12px;top:calc(10px + env(safe-area-inset-top));display:flex;gap:8px;z-index:7}
+  .tools{display:flex;gap:8px;flex:none;margin-left:auto}
   .tools .iconbtn{width:38px;height:38px;position:relative}
+  /* Màn hẹp: hàng công cụ xuống dòng riêng, canh phải, nút nhỏ lại — tên app được
+     trọn chiều ngang thay vì bị bóp còn vài chữ. */
+  @media (max-width:470px){
+    .tools{flex:1 1 100%;justify-content:flex-end;gap:6px}
+    .tools .iconbtn{width:34px;height:34px}
+    .tools .iconbtn svg{width:16px;height:16px}
+  }
 
   .dock{position:fixed;left:0;right:0;bottom:0;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
         background:linear-gradient(to top,rgba(8,12,20,.9),rgba(8,12,20,.45),transparent);z-index:8}
@@ -197,15 +206,13 @@
     <b>Thế Giới Của Ae</b>
     <span id="sub">Đang tải thế giới…</span>
   </div>
-</div>
-
-<div class="tools">
-  <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
-  <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
-  <button class="iconbtn on" id="walkBtn" title="Giữ Hermes &amp; ZeroBot đứng yên tại chỗ (chỉ ở máy bạn — vị trí thật do máy chủ giữ)"><span id="walkIcon"></span></button>
-  <button class="iconbtn" id="makeBtn" title="Đổi nhân vật"><span id="makeIcon"></span></button>
-  <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
-  <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
+  <div class="tools">
+    <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
+    <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
+    <button class="iconbtn" id="makeBtn" title="Đổi nhân vật"><span id="makeIcon"></span></button>
+    <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
+    <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
+  </div>
 </div>
 
 <div class="dock">
@@ -382,7 +389,6 @@ $('g7').innerHTML = svg('hand', 16);
 $('toolChev').innerHTML = svg('chevron', 14);
 $('buildIcon').innerHTML = svg('sparkles', 18);
 $('makeIcon').innerHTML = svg('user', 18);
-$('walkIcon').innerHTML = svg('paw', 18);
 $('makeCloseIcon').innerHTML = svg('close', 16);
 $('makeDoneIcon').innerHTML = svg('check', 16);
 $('buildCloseIcon').innerHTML = svg('close', 16);
@@ -1748,20 +1754,10 @@ $('home').onclick = () => {
    nút 🐾 đổi nghĩa thành hành động CỤC BỘ: chỉ đóng băng nội suy ở máy mình để giữ tụi nó
    đứng yên tại chỗ (tiện ngắm/chụp ảnh), bấm lại thì chạy tiếp theo máy chủ. Tuyệt đối không
    gửi gì lên máy chủ để tránh ảnh hưởng tới vị trí của người chơi khác. */
-let autowalk = true;
-function setAutowalk(on) {
-  autowalk = on;
-  if (on && botState) {
-    const t = performance.now();
-    for (const b of botState.values()) b.baseAt = t;
-  }
-  if (pals && pals.walker) pals.walker.auto = on;
-  if (pals && pals.walker && on) { pals.walker.hintAge = 999; }
-  const b = $('walkBtn');
-  if (b) b.classList.toggle('on', !!on);
-  toast(on ? 'Đi tiếp theo máy chủ nhé (ai cũng thấy tụi này ở chỗ đó)' : 'Đứng yên tại chỗ đã — chỉ ở máy bạn thôi', 3000);
-}
-$('walkBtn').onclick = () => setAutowalk(!autowalk);
+/* Nút 🐾 đã bỏ. Trước đây nó "đóng băng tại máy mình" hai cá thể — vô nghĩa khi vị
+   trí thật đã do máy chủ giữ và ai cũng thấy như nhau. Chỗ dự phòng (máy chủ chưa
+   có dữ liệu) thì cứ đi theo quy tắc lô đất, nên luôn để chúng đi. */
+const autowalk = true;
 if (pals && pals.walker) pals.walker.auto = autowalk;
 
 $('awake').onclick = () => {
