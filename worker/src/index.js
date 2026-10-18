@@ -1103,6 +1103,34 @@ async function advanceBots(env, nowMs) {
         continue;
       }
 
+      // Khi Worker vừa deploy lại hoặc lâu không có người (gap > 15s):
+      // Giữ nguyên vị trí đã lưu trong D1, không chạy bù 30 chặng trong hư vô.
+      if (b.ticked_at && nowMs - b.ticked_at > 15000) {
+        b.leg_at = nowMs;
+        b.ticked_at = nowMs;
+        b.old_ticked_at = oldTickedAt;
+        if (b.mode === 'rest') {
+          if (nowMs >= b.rest_until) {
+            b.mode = 'walk';
+            b.legs = 0;
+            const target = pickTarget(b.bot_id, b.x, b.z, bounds, hermesPos);
+            b.tx = target.tx;
+            b.tz = target.tz;
+          }
+        } else {
+          const remDist = Math.hypot(b.tx - b.x, b.tz - b.z);
+          if (remDist <= 0.1) {
+            const target = pickTarget(b.bot_id, b.x, b.z, bounds, hermesPos);
+            b.tx = target.tx;
+            b.tz = target.tz;
+          }
+        }
+        updates.push(b);
+        result.push(formatBot(b, b.x, b.z, b.yaw, nowMs));
+        if (b.bot_id === 'hermes') hermesPos = { x: b.x, z: b.z, yaw: b.yaw, mode: b.mode };
+        continue;
+      }
+
       let legAt = b.leg_at || nowMs;
       if (nowMs - legAt > 300000) {
         legAt = nowMs - 300000;
@@ -1247,6 +1275,14 @@ async function advanceBots(env, nowMs) {
           cz = b.z + uz * moved;
           if (dist > 0.01) {
             cyaw = Math.atan2(ux, uz);
+          }
+          if (moved > 0.001) {
+            b.x = Math.round(cx * 100) / 100;
+            b.z = Math.round(cz * 100) / 100;
+            b.yaw = Math.round(cyaw * 100) / 100;
+            legAt = nowMs;
+            b.leg_at = legAt;
+            changed = true;
           }
           break;
         }
