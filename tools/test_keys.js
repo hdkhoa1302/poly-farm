@@ -84,7 +84,7 @@ const dDiag   = scen('W + D (đi chéo)', () => { held.add('KeyW'); held.add('Ke
 const dStickF = scen('joystick đẩy hết', null, 20, [0, -1]);
 const dStickH = scen('joystick đẩy nửa', null, 20, [0, -0.5]);
 const dNone   = scen('không bấm gì', null, 20, [0, 0]);
-const dAuto   = scen('đang tự dạo + giữ W', () => { global.pals = { walker: { auto: true } }; held.add('KeyW'); });
+const dAuto   = scen('tự dạo bật + giữ W', () => { global.pals = { walker: { auto: true } }; held.add('KeyW'); });
 global.pals = null;
 
 /* ---------- 4. Q/E xoay camera ---------- */
@@ -120,7 +120,7 @@ check('đi chéo không nhanh hơn đi thẳng', Math.abs(dDiag - dW) < 1e-9);
 check('joystick đẩy hết cỡ vẫn = chạy (không bị phá)', Math.abs(dStickF - dShift) < 1e-9);
 check('joystick đẩy nửa vẫn = đi thường', Math.abs(dStickH - dW) < 1e-9);
 check('không bấm gì thì đứng yên', dNone === 0);
-check('lúc tự dạo thì bàn phím nhường (không giằng lái)', dAuto === 0);
+check('lúc hai cá thể tự đi, ae VẪN lái được nhân vật mình', Math.abs(dAuto - dW) < 1e-9, 'đi ' + dAuto.toFixed(3) + ' so với ' + dW.toFixed(3));
 console.log('\\nTỔNG: ' + pass + ' đạt, ' + fail + ' hỏng');
 process.exit(fail ? 1 : 0);
 `;
