@@ -37,8 +37,14 @@ const document = { createElement: () => ({ width: 0, height: 0, getContext: () =
 class Sprite {
   constructor(material) { this.material = material; this.scale = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y; }, z: 1 }; this.position = { set() {} }; }
 }
-const THREE = { CanvasTexture: class { constructor(c) { this.image = c; } }, Sprite, SpriteMaterial: class {}, SRGBColorSpace: 'srgb' };
-const performance = { now: () => 0 };
+const THREE = {
+  CanvasTexture: class { constructor(c) { this.image = c; } dispose() {} },
+  Sprite,
+  SpriteMaterial: class { dispose() {} },
+  SRGBColorSpace: 'srgb',
+};
+let dongHo = 1000;                        // đồng hồ điều khiển được
+const performance = { now: () => dongHo };
 
 let pass = 0, fail = 0;
 function check(name, ok, extra) {
@@ -94,6 +100,47 @@ for (const t of tin) {
 }
 check('không tin nào đè lên tên', allAbove);
 check('bong bóng to hơn nhãn tên', bubbleSprite('x', 200).scale.y > caoNhan);
+
+console.log('\n=== 4. chat trong game có hiện bong bóng trên đầu không ===');
+const SRC_DROP = slice('function dropBubble(uid) {', 'function showBubble(m) {', 'dropBubble');
+const SRC_SHOW = slice('function showBubble(m) {', '/** Một dòng tin.', 'showBubble');
+const BUBBLE_MS = num(/const BUBBLE_MS = (\d+);/, 'BUBBLE_MS');
+
+const bubbles = new Map();
+let trongNhom = [];
+const bubbleGroup = { add: (s) => trongNhom.push(s), remove: (s) => { trongNhom = trongNhom.filter((x) => x !== s); } };
+const local = new Map([['u1', { group: { position: { x: 3, y: 0, z: 4 } } }]]);
+
+eval(SRC_DROP);
+eval(SRC_SHOW);
+
+console.log('  thời gian hiện mỗi bong bóng: ' + BUBBLE_MS + 'ms');
+
+showBubble({ uid: 'nguoi-la', text: 'không có mặt', hue: 10 });
+check('người không ở trong thế giới thì không tạo bong bóng', bubbles.size === 0, 'số bong bóng ' + bubbles.size);
+
+showBubble({ uid: 'u1', text: 'câu đầu tiên', hue: 200 });
+check('chat khi có mặt -> có bong bóng', bubbles.size === 1, 'số bong bóng ' + bubbles.size);
+check('bong bóng nằm trong cảnh', trongNhom.length === 1);
+const b1 = bubbles.get('u1');
+check('hạn hiện = bây giờ + ' + BUBBLE_MS, b1.until === dongHo + BUBBLE_MS, 'until = ' + b1.until);
+check('có ghi chiều cao để đặt trên tên', typeof b1.h === 'number' && b1.h > 0, 'h = ' + b1.h.toFixed(2));
+
+const spriteCu = b1.sprite;
+showBubble({ uid: 'u1', text: 'câu thứ hai', hue: 200 });
+check('nhắn tiếp thì thay bong bóng cũ, không chồng lên', bubbles.size === 1 && trongNhom.length === 1);
+check('bong bóng cũ bị gỡ khỏi cảnh', !trongNhom.includes(spriteCu));
+
+dongHo += BUBBLE_MS + 1;
+const o = local.get('u1');
+const conHien = !(!o || dongHo > b1.until);
+check('quá ' + BUBBLE_MS + 'ms thì vòng lặp gỡ đi', conHien === false);
+
+console.log('\n=== 5. gọi từ đâu (đọc mã nguồn) ===');
+const soLanGoi = (src.match(/[^a-zA-Z]showBubble\(/g) || []).length;
+check('có gọi lúc bấm gửi và lúc nhận tin (≥2 chỗ)', soLanGoi >= 2, soLanGoi + ' chỗ gọi');
+check('lúc gửi tin: trong sendChat', /sendChat[\s\S]{0,2000}showBubble\(/.test(src));
+check('lúc nhận tin: trong pollChat', /chatSeen\.add\(m\.id\)[\s\S]{0,1200}showBubble\(/.test(src));
 
 console.log('\nTỔNG: ' + pass + ' đạt, ' + fail + ' hỏng');
 process.exit(fail ? 1 : 0);

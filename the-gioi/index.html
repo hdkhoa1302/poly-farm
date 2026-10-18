@@ -767,14 +767,13 @@ async function randomSpot() {
 
 class Walker {
   constructor() {
-    this.mode = 'walk';       // walk | rest
+    this.mode = 'walk';        // walk | rest
     this.way = null;
-    this.legs = 0;            // số chặng đã đi trong vòng này
-    this.cooldown = 6000;
-    this.rest = 0;
-    this.restMax = 11000;
-    this.arrived = 0;
-    this.speed = 3.0;         // chậm hơn người chơi cho ra dáng dắt chó đi dạo
+    this.legs = 0;             // số chặng đã đi trong vòng này (đủ 6 chặng thì ghé ngồi chơi)
+    this.nextPickAt = 0;       // mốc giờ thực được phép chọn chỗ mới
+    this.restUntil = 0;
+    this.arrivedAt = 0;
+    this.speed = 3.0;          // chậm hơn người chơi cho ra dáng dắt chó đi dạo
   }
 
   /* đang đi mà bị kẹt / tới nơi → chọn chỗ mới; đủ chặng → ghé ngồi chơi */
@@ -782,13 +781,12 @@ class Walker {
     if (this.legs >= 6) {
       this.legs = 0;
       this.mode = 'rest';
-      this.rest = 0;
-      this.restMax = 9000 + Math.random() * 9000;     // 9–18 giây ngồi chơi
-      this.cooldown = 14000 + Math.random() * 12000;  // nghỉ xong đứng dậy đi tiếp
+      this.restUntil = now + 9000 + Math.random() * 9000;    // 9–18 giây ngồi chơi
+      this.nextPickAt = this.restUntil + 3000 + Math.random() * 5000;
       pals.say('Ghé đây ngồi chơi chút nhé ZeroBot 🐾');
       return;
     }
-    this.cooldown = 5000 + Math.random() * 6000;
+    this.nextPickAt = now + 5000 + Math.random() * 6000;
     const p = await randomSpot();
     if (!p) { this.way = null; return; }
     this.legs++;
@@ -813,24 +811,26 @@ class Walker {
 
     if (this.mode === 'walk') {
       player.moving = true; player.sprint = false;
-      if (!this.way) { this.cooldown -= dt; if (this.cooldown <= 0) this.pick(now); return true; }
+      if (!this.way) { if (now >= this.nextPickAt) this.pick(now); return true; }
       const d = Math.hypot(this.way.x - player.x, this.way.z - player.z);
-      if (d > 2.5 && now - this.way.at > 3400) { this.way = null; this.cooldown = 0; }   // kẹt
-      else if (d < 0.7) { this.arrived += dt; if (this.arrived > 400) { this.arrived = 0; this.pick(now); } }
-      else {
+      if (d > 2.5 && now - this.way.at > 3600) { this.way = null; this.nextPickAt = now; }   // kẹt → đổi chỗ
+      else if (d < 0.8) {
+        if (!this.arrivedAt) this.arrivedAt = now;
+        if (now - this.arrivedAt > 450) { this.arrivedAt = 0; this.pick(now); }              // tới nơi → nghía chỗ mới
+      } else {
+        this.arrivedAt = 0;
         const step = this.speed * dt / 1000;
         const ux = (this.way.x - player.x) / d, uz = (this.way.z - player.z) / d;
         const nx = player.x + ux * step, nz = player.z + uz * step;
-        if (stepAvail(nx, nz)) { player.x = nx; player.z = nz; this.arrived = 0; }
-        else if (stepAvail(nx, player.z)) { player.x = nx; this.arrived = 0; }
-        else if (stepAvail(player.x, nz)) { player.z = nz; this.arrived = 0; }
-        else if (player.grounded && player.y < MAX_Y - 1) player.vy = JUMP_V;            // vướng thì nhảy
+        if (stepAvail(nx, nz)) { player.x = nx; player.z = nz; }
+        else if (stepAvail(nx, player.z)) { player.x = nx; }
+        else if (stepAvail(player.x, nz)) { player.z = nz; }
+        else if (player.grounded && player.y < MAX_Y - 1) player.vy = JUMP_V;               // vướng thì nhảy
       }
     } else {
       player.moving = false; player.sprint = false;
-      this.rest += dt;
-      if (this.rest > this.restMax) {
-        this.mode = 'walk'; this.way = null; this.cooldown = 0; this.legs = 0;
+      if (now >= this.restUntil) {
+        this.mode = 'walk'; this.way = null; this.legs = 0; this.nextPickAt = now;
         this.pick(now);
       }
     }
