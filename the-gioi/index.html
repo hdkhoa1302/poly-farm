@@ -726,7 +726,9 @@ function buildPals() {
 
   return {
     root,
+    frames: 0,
     update(dt, now, p) {
+      this.frames++;
       if (!p.ready) { root.visible = false; return; }
       root.visible = true;
 
@@ -1504,6 +1506,7 @@ function tick(now) {
     }
   }
 
+  if (!pals && player.ready) ensurePals();     // lỡ renderWorld chạy trước khi có thế giới
   if (pals) pals.update(dt, now, player);      // Hermes dắt ZeroBot đi theo
 
   if (carrying) updateCarryPreview();
@@ -2530,7 +2533,7 @@ boot();
 if (new URLSearchParams(location.search).has('debug')) {
   window.__tg = { get player() { return player; }, get camera() { return camera; },
                   get controls() { return controls; }, held, keyVec, keyDir: KEYDIR,
-                  get stickVec() { return stickVec; }, tick };
+                  get stickVec() { return stickVec; }, get renderer() { return renderer; }, tick };
 }
 </script>
 </body>
