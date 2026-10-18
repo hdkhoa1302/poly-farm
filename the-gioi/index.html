@@ -793,6 +793,7 @@ class Walker {
     this.way = { x: p.x, z: p.z, at: now, rest: p.y };
     player.yaw = Math.atan2(p.x - player.x, p.z - player.z);
     pals.say(WALK_POINTS[Math.floor(Math.random() * WALK_POINTS.length)]());
+    if (Math.random() < 0.45) pals.sayDog(['Gâu! 🐾', 'Gâu gâu!', 'Hức hức… 🐾', 'Gâu! (đi đâu đó?)'][Math.floor(Math.random() * 4)], 2000);
   }
 
   /** true = mình đang tự lái; false = nhường lái cho ae */
