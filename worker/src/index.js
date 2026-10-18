@@ -561,11 +561,15 @@ async function worldLive(env) {
   const rev = await env.DB.prepare(
     `SELECT COALESCE(MAX(at),0) AS m, COUNT(*) AS c FROM world_blocks`
   ).first();
+  /* Số hiệu tin chat mới nhất: app so số này để hỏi chat NGAY khi có tin,
+     thay vì đợi nhịp 1,8 giây -> bong bóng nói hiện gần như tức thì. */
+  const chat = await env.DB.prepare('SELECT COALESCE(MAX(id),0) AS m FROM world_chat').first();
 
   return json({
     ok: true, now,
     // mã thay đổi của khối: thời điểm sửa mới nhất + số lượng
     rev: (rev ? rev.m : 0) * 100000 + ((rev ? rev.c : 0) % 100000),
+    chat: chat ? chat.m : 0,
     members: (mem.results || []).map((m) => ({
       id: m.user_id,
       x: m.pos_x, z: m.pos_z, y: m.pos_y,

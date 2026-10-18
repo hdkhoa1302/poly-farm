@@ -1744,7 +1744,10 @@ addEventListener('keyup', (e) => {
   held.delete(e.code);
 });
 addEventListener('blur', () => { held.clear(); keySprint = false; });   // rời tab → nhả hết, khỏi chạy mãi
-document.addEventListener('visibilitychange', () => { if (document.hidden) { held.clear(); keySprint = false; } });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { held.clear(); keySprint = false; return; }
+  pollLive(); pollChat();                    // quay lại tab: cập nhật ngay, khỏi đợi nhịp
+});
 
 function tick(now) {
   requestAnimationFrame(tick);
@@ -1807,10 +1810,12 @@ function tick(now) {
       }
       continue;
     }
-    // người khác: trượt dần tới vị trí mới nhất (server chỉ ~1 giây/lần)
+    // người khác: trượt tới vị trí mới nhất. Hệ số tính theo THỜI GIAN chứ
+    // không theo số khung hình — máy 30 hay 120 khung hình đều mượt như nhau.
     if (id !== myId && o.tx != null) {
-      o.group.position.x += (o.tx - o.group.position.x) * 0.2;
-      o.group.position.z += (o.tz - o.group.position.z) * 0.2;
+      const kw = 1 - Math.exp(-dt / 110);
+      o.group.position.x += (o.tx - o.group.position.x) * kw;
+      o.group.position.z += (o.tz - o.group.position.z) * kw;
       o.label.position.x = o.group.position.x;
       o.label.position.z = o.group.position.z;
       if (o.zzz) { o.zzz.position.x = o.group.position.x + 1.1; o.zzz.position.z = o.group.position.z + 0.4; }
@@ -2611,6 +2616,7 @@ async function createObject() {
 const chatPanel = $('chatPanel'), chatList = $('chatList'), chatIn = $('chatIn');
 const chatBadge = $('chatBadge');
 let chatLast = 0, chatOpen = false, chatUnread = 0, chatBusy = false, chatReady = false;
+let liveTimer = null, liveOthers = 0, liveMovedAt = 0, lastChatId = null;
 const chatSeen = new Set();
 
 /* bong bóng nói trên đầu nhân vật */
@@ -2823,6 +2829,20 @@ async function refreshWorld() {
   } finally { refreshing = false; }
 }
 
+/* ------------------------------------------------------------------ thời gian thực
+ * Trước đây: hỏi máy chủ đều đặn 1,2 giây một lần, bất kể đang làm gì. Giờ nhịp
+ * co giãn theo tình huống — có người khác đang cử động thì hỏi dày, một mình
+ * thì thưa, ẩn tab thì gần như ngừng. Vừa mượt hơn khi chơi chung, vừa đỡ tốn
+ * hạn mức của Worker (gói miễn phí 100k lượt/ngày).
+ */
+const LIVE_FAST = 400, LIVE_SLOW = 1000, LIVE_ALONE = 1600, LIVE_HIDDEN = 4000;
+/** nhịp chờ kế tiếp (ms). Hàm thuần để kiểm được, không dính đồng hồ. */
+function liveDelay(hidden, others, sinceMove) {
+  if (hidden) return LIVE_HIDDEN;
+  if (others < 1) return LIVE_ALONE;
+  return sinceMove < 5000 ? LIVE_FAST : LIVE_SLOW;
+}
+
 async function pollLive() {
   const r = await get('/world/live');
   if (!r.ok || !r.body) return;
@@ -2834,16 +2854,31 @@ async function pollLive() {
   lastRev = d.rev;
 
   const alive = new Set();
+  liveOthers = 0;
+  let aiCungCuDong = false;
   for (const m of d.members) {
     alive.add(m.id);
     if (m.id === myId) continue;
+    if (!m.asleep) liveOthers++;
     const o = local.get(m.id);
     if (!o) { needFull = true; continue; }                    // người mới vào
     if (o.asleep !== !!m.asleep) { needFull = true; continue; } // vừa ngủ / vừa thức
-    if (m.x != null && m.z != null) { o.tx = m.x; o.tz = m.z; }
+    if (m.x != null && m.z != null) {
+      /* có ai vừa nhích → giữ nhịp hỏi dày thêm 5 giây */
+      if (o.tx != null && (Math.abs(o.tx - m.x) > 0.01 || Math.abs(o.tz - m.z) > 0.01)) aiCungCuDong = true;
+      o.tx = m.x; o.tz = m.z;
+    }
     if (m.y != null) o.base = m.y;                     // đứng trong nhà hay trên mái
   }
   if (local.size !== alive.size) needFull = true;             // có người rời đi
+  if (aiCungCuDong) liveMovedAt = Date.now();
+
+  /* Có tin chat mới → hỏi ngay, không đợi nhịp chat 1,8 giây. Đây là phần làm
+     cho "nói chuyện với nhau" có cảm giác thời gian thực. */
+  if (d.chat != null && d.chat !== lastChatId) {
+    lastChatId = d.chat;
+    pollChat();
+  }
 
   if (needFull) await refreshWorld();
 }
@@ -2852,7 +2887,13 @@ if (inTg && initData()) {
   // nhịp sống khi không đi đâu (đứng yên vẫn phải báo là còn thức)
   setInterval(() => post('/world/join', { initData: initData(), beat: true, x: player.x, y: player.y, z: player.z }), 45000);
   // nền tảng: cập nhật vị trí + phát hiện thay đổi
-  setInterval(pollLive, 1200);
+  /* Vòng tự hẹn nhịp, không dùng setInterval cố định: nhịp phải đổi theo tình
+     huống, và tab ẩn thì gần như ngừng để đỡ tốn hạn mức. */
+  (async function liveLoop() {
+    try { await pollLive(); } catch (e) {}
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(liveLoop, liveDelay(document.hidden, liveOthers, Date.now() - liveMovedAt));
+  })();
   setInterval(pollChat, 1800);
   pollChat();
   // lưới an toàn: làm mới toàn bộ dù không thấy thay đổi (mất mạng chớp, v.v.)
