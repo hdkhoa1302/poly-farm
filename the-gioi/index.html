@@ -758,6 +758,8 @@ function buildPals() {
       robot.rotation.y = yaw;
       dog.position.copy(dogPos);
       dog.rotation.y = dogYaw;
+      robot.scale.setScalar(1.05);
+      dog.scale.setScalar(1.18);
 
       /* nhịp bước tính theo quãng đường thật đã đi → đứng yên là chân đứng yên */
       const step = Math.hypot(pos.x - lastX, pos.z - lastZ);
@@ -809,8 +811,8 @@ function buildPals() {
       leashGeo.attributes.position.needsUpdate = true;
       leashGeo.computeBoundingSphere();
 
-      robotLabel.position.set(pos.x, pos.y + 1.62, pos.z);
-      dogLabel.position.set(dogPos.x, dogPos.y + 1.05, dogPos.z);
+      robotLabel.position.set(pos.x, pos.y + 1.85, pos.z);
+      dogLabel.position.set(dogPos.x, dogPos.y + 1.45, dogPos.z);
     }
   };
 }
