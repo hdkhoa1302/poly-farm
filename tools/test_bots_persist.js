@@ -226,7 +226,13 @@ function check(name, ok, extra) {
   const hInit = bots1.find(b => b.id === 'hermes');
   check('Bot khởi tạo ở vị trí cố định', hInit && hInit.x === 26 && hInit.z === 30);
 
-  await advanceBots(env, 11000);                       // chọn chặng đầu
+  /* Đo tốc độ cho CHẮC: ghim sẵn một chặng dài 20 đơn vị từ mốc cố định, nên 3 giây
+     phải đi đúng 9,0 đơn vị. Trước đây bài kiểm lấy chặng ngẫu nhiên rồi hỏi cứng
+     "> 8.5", nên chặng ngắn (dưới 9 đơn vị) làm đỏ oan khoảng 1/10 lần — lời khai
+     "chạy xanh hết" hoá ra là may rủi. */
+  const hangHermes = mockDB.store.get('hermes');
+  mockDB.store.set('hermes', { ...hangHermes, x: 26, z: 30, tx: 26, tz: 50, mode: 'walk',
+    legs: 0, leg_at: 11000, rest_until: 0, say: '', say_until: 0, ticked_at: 11000 });
   const neo = (await advanceBots(env, 11000)).find(b => b.id === 'hermes');
   const hMoved = (await advanceBots(env, 14000)).find(b => b.id === 'hermes');   // +3 giây
   const diDuoc = Math.hypot(hMoved.x - neo.x, hMoved.z - neo.z);

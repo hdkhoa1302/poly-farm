@@ -123,6 +123,7 @@ async function route(request, url, env) {
   if (p === '/world/blocks' && request.method === 'POST') return worldBlocks(request, env);
   if (p === '/world/move' && request.method === 'POST') return worldMove(request, env);
   if (p === '/world/look' && request.method === 'POST') return worldLook(request, env);
+  if (p === '/bots/state' && request.method === 'POST') return updateBotsState(request, env);
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -536,6 +537,12 @@ async function worldState(env) {
 
   let bots = [];
   try { bots = await advanceBots(env, Date.now()); } catch {}
+  const hermesBot = bots.find((b) => b.id === 'hermes');
+  const botsWorking = {
+    hermes: hermesBot ? (hermesBot.working || 0) : 0,
+    agy: hermesBot ? (hermesBot.agy_working || 0) : 0,
+    at: hermesBot ? (hermesBot.working_at || 0) : 0,
+  };
 
   return json({
     ok: true,
@@ -552,6 +559,7 @@ async function worldState(env) {
       blocks: byUser[m.user_id] || [],
     })),
     bots,
+    botsWorking,
   });
 }
 
@@ -574,6 +582,12 @@ async function worldLive(env) {
 
   let bots = [];
   try { bots = await advanceBots(env, Date.now()); } catch {}
+  const hermesBotLive = bots.find((b) => b.id === 'hermes');
+  const botsWorkingLive = {
+    hermes: hermesBotLive ? (hermesBotLive.working || 0) : 0,
+    agy: hermesBotLive ? (hermesBotLive.agy_working || 0) : 0,
+    at: hermesBotLive ? (hermesBotLive.working_at || 0) : 0,
+  };
 
   return json({
     ok: true, now,
@@ -587,6 +601,7 @@ async function worldLive(env) {
       asleep: (now - m.last_seen) > SLEEP_SEC,
     })),
     bots,
+    botsWorking: botsWorkingLive,
   });
 }
 
@@ -960,6 +975,66 @@ const BOT_SAYINGS = {
   ],
 };
 
+/* Bảng world_bots được tạo từ trước khi có 3 cột làm việc, mà `CREATE TABLE IF NOT
+   EXISTS` trong schema.sql KHÔNG thêm cột cho bảng đã tồn tại — nên tự vá lấy.
+   Chỉ vá khi câu UPDATE thật sự hỏng vì thiếu cột: đặt 3 câu DDL này lên trước thì
+   mỗi phút (đầu gửi ở máy đẩy 1 phút/lần) lại có 3 câu DDL hỏng vô ích. */
+let botsStateColsOk = false;        // trong isolate này đã chắc có 3 cột chưa
+async function ensureBotsStateCols(env) {
+  if (botsStateColsOk) return;
+  for (const ddl of [
+    'ALTER TABLE world_bots ADD COLUMN working INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE world_bots ADD COLUMN working_at INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE world_bots ADD COLUMN agy_working INTEGER NOT NULL DEFAULT 0',
+  ]) {
+    try { await env.DB.prepare(ddl).run(); } catch {}
+  }
+  botsStateColsOk = true;
+}
+
+async function updateBotsState(request, env) {
+  if (!env.INGEST_SECRET) return json({ error: 'ingest disabled' }, 503);
+  if (request.headers.get('X-Ingest-Secret') !== env.INGEST_SECRET) {
+    return json({ error: 'forbidden' }, 403);
+  }
+  let b;
+  try {
+    b = await request.json();
+  } catch {
+    return json({ error: 'bad json' }, 400);
+  }
+  if (!b || typeof b !== 'object') return json({ error: 'invalid payload' }, 400);
+
+  const hermesWorking = b.hermes ? 1 : 0;
+  const agyWorking = b.agy ? 1 : 0;
+  const nowMs = Date.now();
+
+  const ghi = () => env.DB.prepare(
+    `UPDATE world_bots
+     SET working = ?, agy_working = ?, working_at = ?
+     WHERE bot_id = 'hermes'`
+  ).bind(hermesWorking, agyWorking, nowMs).run();
+
+  try {
+    let res;
+    try {
+      res = await ghi();
+    } catch {
+      await ensureBotsStateCols(env);      // thiếu cột -> vá rồi ghi lại
+      res = await ghi();
+    }
+
+    if (!res || !res.meta || res.meta.changes === 0) {
+      await seedBots(env, nowMs);          // chưa có bản ghi hermes -> dựng rồi ghi
+      await ghi();
+    }
+
+    return json({ ok: true, hermes: hermesWorking, agy: agyWorking, at: nowMs });
+  } catch (err) {
+    return json({ error: 'db write failed', detail: String(err && err.message) }, 500);
+  }
+}
+
 async function worldBots(env) {
   let bots = [];
   try { bots = await advanceBots(env, Date.now()); } catch {}
@@ -1041,7 +1116,7 @@ function formatBot(b, cx, cz, cyaw, nowMs) {
   const isRest = b.mode === 'rest';
   const rx = Math.round(cx * 100) / 100;
   const rz = Math.round(cz * 100) / 100;
-  return {
+  const res = {
     id: b.bot_id,
     name: b.name,
     x: rx,
@@ -1053,20 +1128,28 @@ function formatBot(b, cx, cz, cyaw, nowMs) {
     mode: b.mode,
     say: (b.say_until && nowMs < b.say_until) ? (b.say || '') : '',
     at: b.ticked_at || nowMs,
+    working: b.working ? 1 : 0,
+    working_at: b.working_at || 0,
   };
+  if (b.bot_id === 'hermes') {
+    res.agy_working = b.agy_working ? 1 : 0;
+  }
+  return res;
 }
 
 async function advanceBots(env, nowMs) {
   try {
     const q = await env.DB.prepare(
-      `SELECT bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at
+      `SELECT bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at,
+              working, working_at, agy_working
        FROM world_bots`
     ).all();
     let rows = q.results || [];
     if (rows.length < 2) {
       await seedBots(env, nowMs);
       const q2 = await env.DB.prepare(
-        `SELECT bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at
+        `SELECT bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at,
+                working, working_at, agy_working
          FROM world_bots`
       ).all();
       rows = q2.results || [];
@@ -1086,6 +1169,22 @@ async function advanceBots(env, nowMs) {
     for (const b of [hermes, zerobot]) {
       const oldTickedAt = b.ticked_at;
       let changed = false;
+
+      if (b.bot_id === 'hermes' && b.working) {
+        b.tx = b.x;
+        b.tz = b.z;
+        b.leg_at = nowMs;
+        result.push(formatBot(b, b.x, b.z, b.yaw, nowMs));
+        hermesPos = { x: b.x, z: b.z, yaw: b.yaw, mode: b.mode, working: 1 };
+        continue;
+      }
+      if (b.bot_id === 'zerobot' && hermesPos && hermesPos.working) {
+        b.tx = b.x;
+        b.tz = b.z;
+        b.leg_at = nowMs;
+        result.push(formatBot(b, b.x, b.z, b.yaw, nowMs));
+        continue;
+      }
 
       if (b.say && nowMs >= b.say_until) {
         b.say = '';

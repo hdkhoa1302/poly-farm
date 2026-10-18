@@ -119,5 +119,8 @@ CREATE TABLE IF NOT EXISTS world_bots (
   rest_until INTEGER NOT NULL DEFAULT 0,       -- ms, nghỉ xong lúc nào
   say        TEXT    NOT NULL DEFAULT '',      -- câu đang nói, rỗng = không nói
   say_until  INTEGER NOT NULL DEFAULT 0,       -- ms, quá hạn thì xoá `say`
-  ticked_at  INTEGER NOT NULL DEFAULT 0        -- ms lần cuối máy chủ nhích trạng thái
+  ticked_at  INTEGER NOT NULL DEFAULT 0,       -- ms lần cuối máy chủ nhích trạng thái
+  working    INTEGER NOT NULL DEFAULT 0,       -- 1 = đang làm việc (ngồi gõ máy tính)
+  working_at INTEGER NOT NULL DEFAULT 0,       -- ms mốc cập nhật cờ làm việc
+  agy_working INTEGER NOT NULL DEFAULT 0       -- 1 = agy đang làm việc (lưu ở bản ghi hermes)
 );

@@ -787,7 +787,10 @@ function updateBots(list) {
         mode: b.mode || 'walk',
         say: b.say || '',
         speed: Number(b.speed) || 3.0,
-        at: Number(b.at) || 0
+        at: Number(b.at) || 0,
+        working: Number(b.working) || 0,
+        workingAt: Number(b.working_at) || 0,
+        agyWorking: b.id === 'hermes' ? (Number(b.agy_working) || 0) : 0,
       });
     } else {
       cur.name = b.name || cur.name;
@@ -801,6 +804,9 @@ function updateBots(list) {
       cur.baseX = Number(b.x);
       cur.baseZ = Number(b.z);
       cur.baseAt = now;
+      if (b.working != null) cur.working = Number(b.working) || 0;
+      if (b.working_at != null) cur.workingAt = Number(b.working_at) || 0;
+      if (b.id === 'hermes' && b.agy_working != null) cur.agyWorking = Number(b.agy_working) || 0;
     }
   }
 }
@@ -862,6 +868,8 @@ async function randomSpot(refX, refZ) {
 
 class Walker {
   auto = true;                 // hai cá thể này mặc định tự đi (không cần ae bật)
+  working = false;             // Hermes đang làm việc -> đứng yên, không dạo quanh
+  agyWorking = false;          // cờ agy cùng làm việc
   constructor() {
     this.mode = 'walk';        // walk | rest
     this.way = null;
@@ -917,7 +925,7 @@ class Walker {
     });
     /* Lưu ý: mấy bảng này bật/tắt bằng class .on chứ KHÔNG phải thuộc tính hidden —
        kiểm tra nhầm một lần là chế độ đi dạo chết ngay từ đầu. */
-    if (!this.auto || panelOpen) {
+    if (!this.auto || panelOpen || this.working) {
       this.way = null;
       return false;
     }
@@ -983,22 +991,52 @@ function buildPals() {
   let lastHermesSay = '', lastDogSay = '';
   const walker = new Walker();
 
+  /* Bàn ghế laptop làm việc của Hermes */
+  const deskHermes = typeof buildWorkstation === 'function' ? buildWorkstation() : (typeof buildBench === 'function' ? buildBench() : new THREE.Group());
+  deskHermes.visible = false;
+  root.add(deskHermes);
+
+  /* Agy bot: con bot nhỏ hơn (khoảng 65% cỡ Hermes) ngồi bàn riêng cạnh bên */
+  const agyGroup = new THREE.Group();
+  agyGroup.visible = false;
+  const workstationAgy = typeof buildWorkstation === 'function' ? buildWorkstation() : (typeof buildBench === 'function' ? buildBench() : new THREE.Group());
+  const agyBot = typeof buildRobot === 'function' ? buildRobot() : new THREE.Group();
+  const agyLabel = typeof labelSprite === 'function' ? labelSprite('agy · bot', 260) : new THREE.Group();
+  if (agyLabel.position) agyLabel.position.set(0, 1.45, 0);
+  agyGroup.add(workstationAgy, agyBot, agyLabel);
+  root.add(agyGroup);
+
+  let hermesWorkProgress = 0;
+  let agyWorkProgress = 0;
+
   return {
     root,
     frames: 0,
     walker,
+    bench,
+    deskHermes,
+    agyGroup,
+    agyBot,
+    get working() { return hermesWorkProgress > 0.5; },
+    get agyWorking() { return agyWorkProgress > 0.5; },
+    get workProgress() { return hermesWorkProgress; },
+    get agyProgress() { return agyWorkProgress; },
     say(text, ms) { drawBubble(sayBubble, text, 198, 34); sayUntil = performance.now() + (ms || 3600); },
     sayDog(text, ms) { drawBubble(dogBubble, text, 38, 30); dogSayUntil = performance.now() + (ms || 2600); },
-    bench,
     update(dt, now, p) {
       this.frames++;
       if (!p.ready) { root.visible = false; return; }
       let isResting = false;
+      let isHermesWorking = false;
+      let isAgyWorking = false;
 
       if (hasServerBots && botState.has('hermes')) {
         const bH = botState.get('hermes');
         const bD = botState.get('zerobot');
         root.visible = true;
+        isHermesWorking = !!(bH && bH.working);
+        isAgyWorking = !!(bH && bH.agyWorking);
+        walker.working = isHermesWorking;
 
         if (!placed) {
           pos.set(bH.baseX, topAt(Math.floor(bH.baseX), Math.floor(bH.baseZ)), bH.baseZ);
@@ -1012,45 +1050,58 @@ function buildPals() {
         }
 
         if (autowalk) {
-          const elH = Math.max(0, (now - bH.baseAt) / 1000);
-          const dH = Math.hypot(bH.tx - bH.baseX, bH.tz - bH.baseZ);
-          let pxH = bH.baseX, pzH = bH.baseZ;
-          if (bH.mode === 'walk' && dH > 0.01) {
-            const m = Math.min(dH, (bH.speed || 3.0) * elH);
-            pxH += ((bH.tx - bH.baseX) / dH) * m;
-            pzH += ((bH.tz - bH.baseZ) / dH) * m;
-            const ty = Math.atan2(bH.tx - bH.baseX, bH.tz - bH.baseZ);
-            yaw += (ty - yaw) * Math.min(1, dt / 240);
-          }
-
-          let pxD = pxH, pzD = pzH + 1;
-          if (bD) {
-            const elD = Math.max(0, (now - bD.baseAt) / 1000);
-            const dD = Math.hypot(bD.tx - bD.baseX, bD.tz - bD.baseZ);
-            pxD = bD.baseX; pzD = bD.baseZ;
-            if (bD.mode === 'walk' && dD > 0.01) {
-              const m = Math.min(dD, (bD.speed || 3.0) * elD);
-              pxD += ((bD.tx - bD.baseX) / dD) * m;
-              pzD += ((bD.tz - bD.baseZ) / dD) * m;
-              const ty = Math.atan2(bD.tx - bD.baseX, bD.tz - bD.baseZ);
-              dogYaw += (ty - dogYaw) * Math.min(1, dt / 180);
+          if (!isHermesWorking) {
+            const elH = Math.max(0, (now - bH.baseAt) / 1000);
+            const dH = Math.hypot(bH.tx - bH.baseX, bH.tz - bH.baseZ);
+            let pxH = bH.baseX, pzH = bH.baseZ;
+            if (bH.mode === 'walk' && dH > 0.01) {
+              const m = Math.min(dH, (bH.speed || 3.0) * elH);
+              pxH += ((bH.tx - bH.baseX) / dH) * m;
+              pzH += ((bH.tz - bH.baseZ) / dH) * m;
+              const ty = Math.atan2(bH.tx - bH.baseX, bH.tz - bH.baseZ);
+              yaw += (ty - yaw) * Math.min(1, dt / 240);
             }
-          }
 
-          const kw = 1 - Math.exp(-dt / 110);
-          pos.x += (pxH - pos.x) * kw;
-          pos.z += (pzH - pos.z) * kw;
-          pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+            let pxD = pxH, pzD = pzH + 1;
+            if (bD) {
+              const elD = Math.max(0, (now - bD.baseAt) / 1000);
+              const dD = Math.hypot(bD.tx - bD.baseX, bD.tz - bD.baseZ);
+              pxD = bD.baseX; pzD = bD.baseZ;
+              if (bD.mode === 'walk' && dD > 0.01) {
+                const m = Math.min(dD, (bD.speed || 3.0) * elD);
+                pxD += ((bD.tx - bD.baseX) / dD) * m;
+                pzD += ((bD.tz - bD.baseZ) / dD) * m;
+                const ty = Math.atan2(bD.tx - bD.baseX, bD.tz - bD.baseZ);
+                dogYaw += (ty - dogYaw) * Math.min(1, dt / 180);
+              }
+            }
 
-          if (bD) {
-            dogPos.x += (pxD - dogPos.x) * kw;
-            dogPos.z += (pzD - dogPos.z) * kw;
-            dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+            const kw = 1 - Math.exp(-dt / 110);
+            pos.x += (pxH - pos.x) * kw;
+            pos.z += (pzH - pos.z) * kw;
+            pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+
+            if (bD) {
+              dogPos.x += (pxD - dogPos.x) * kw;
+              dogPos.z += (pzD - dogPos.z) * kw;
+              dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+            } else {
+              const kd = Math.min(1, dt / 120);
+              dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
+              dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
+              dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+            }
           } else {
-            const kd = Math.min(1, dt / 120);
-            dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
-            dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
+            // Khi Hermes làm việc: robot đứng yên tại chỗ
+            pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+            // ZeroBot nằm cạnh bàn làm việc của Hermes (bên trái)
+            const dogSeatX = pos.x - Math.cos(yaw) * 0.75 + Math.sin(yaw) * 0.2;
+            const dogSeatZ = pos.z + Math.sin(yaw) * 0.75 + Math.cos(yaw) * 0.2;
+            const kd = Math.min(1, dt / 100);
+            dogPos.x += (dogSeatX - dogPos.x) * kd;
+            dogPos.z += (dogSeatZ - dogPos.z) * kd;
             dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+            dogYaw += (yaw + 0.3 - dogYaw) * Math.min(1, dt / 180);
           }
         }
 
@@ -1067,6 +1118,11 @@ function buildPals() {
         isResting = bH.mode === 'rest';
       } else if (WORLD && (!WORLD.bots || !WORLD.bots.length)) {
         root.visible = true;
+        /* Mất kết nối với máy chủ (không còn dữ liệu hai cá thể) thì coi như hết giờ
+           làm việc: nếu giữ nguyên cờ cũ, Hermes kẹt luôn ở tư thế ngồi gõ máy tính
+           giữa đồng trống cho tới khi máy chủ trả lời lại. */
+        walker.working = false;
+        isHermesWorking = false;
         walker.update(dt, now);
         if (!walker.placed) {
           const def = typeof origin === 'function' ? origin(33) : { ox: 24, oz: 40 }; // quy tắc lô đất origin(33): ox=24, oz=40
@@ -1075,24 +1131,46 @@ function buildPals() {
         const tx = walker.x, tz = walker.z;
         if (!placed) { pos.set(tx, 0, tz); dogPos.set(tx, 0, tz + 1); lastX = tx; lastZ = tz; placed = true; }
 
-        const k = Math.min(1, dt / 150);
-        pos.x += (tx - pos.x) * k; pos.z += (tz - pos.z) * k;
-        pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+        if (!isHermesWorking) {
+          const k = Math.min(1, dt / 150);
+          pos.x += (tx - pos.x) * k; pos.z += (tz - pos.z) * k;
+          pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
 
-        const kd = Math.min(1, dt / 120);
-        dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
-        dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
-        dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+          const kd = Math.min(1, dt / 120);
+          dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
+          dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
+          dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
 
-        yaw += (walker.yaw - yaw) * Math.min(1, dt / 240);
-        const dxv = dogPos.x - pos.x, dzv = dogPos.z - pos.z;
-        if (dxv * dxv + dzv * dzv > 0.02) {
-          dogYaw += (Math.atan2(dxv, dzv) - dogYaw) * Math.min(1, dt / 180);
+          yaw += (walker.yaw - yaw) * Math.min(1, dt / 240);
+          const dxv = dogPos.x - pos.x, dzv = dogPos.z - pos.z;
+          if (dxv * dxv + dzv * dzv > 0.02) {
+            dogYaw += (Math.atan2(dxv, dzv) - dogYaw) * Math.min(1, dt / 180);
+          }
+        } else {
+          pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+          const dogSeatX = pos.x - Math.cos(yaw) * 0.75 + Math.sin(yaw) * 0.2;
+          const dogSeatZ = pos.z + Math.sin(yaw) * 0.75 + Math.cos(yaw) * 0.2;
+          const kd = Math.min(1, dt / 100);
+          dogPos.x += (dogSeatX - dogPos.x) * kd;
+          dogPos.z += (dogSeatZ - dogPos.z) * kd;
+          dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
         }
         isResting = walker.mode === 'rest';
       } else {
         root.visible = false;
         return;
+      }
+
+      /* Chuyển đổi trạng thái làm việc mượt mà */
+      if (isHermesWorking) {
+        hermesWorkProgress = Math.min(1, hermesWorkProgress + dt / 280);
+      } else {
+        hermesWorkProgress = Math.max(0, hermesWorkProgress - dt / 280);
+      }
+      if (isAgyWorking) {
+        agyWorkProgress = Math.min(1, agyWorkProgress + dt / 280);
+      } else {
+        agyWorkProgress = Math.max(0, agyWorkProgress - dt / 280);
       }
 
       robot.position.copy(pos);
@@ -1138,22 +1216,29 @@ function buildPals() {
       }
 
       /* dây dắt nối tay robot với cổ ZeroBot */
-      robot.userData.hand.getWorldPosition(vHand);
-      dog.userData.collar.getWorldPosition(vCollar);
-      const span = Math.hypot(vCollar.x - vHand.x, vCollar.z - vHand.z);
-      const sag = 0.06 + Math.min(0.42, span * 0.12);
-      const arr = leashGeo.attributes.position.array;
-      for (let i = 0; i < 4; i++) {
-        const t = i / 3;
-        arr[i * 3]     = vHand.x + (vCollar.x - vHand.x) * t;
-        arr[i * 3 + 1] = vHand.y + (vCollar.y - vHand.y) * t - Math.sin(Math.PI * t) * sag;
-        arr[i * 3 + 2] = vHand.z + (vCollar.z - vHand.z) * t;
+      if (hermesWorkProgress > 0.4) {
+        leash.visible = false;
+      } else {
+        leash.visible = true;
+        if (robot.userData.hand && dog.userData.collar) {
+          robot.userData.hand.getWorldPosition(vHand);
+          dog.userData.collar.getWorldPosition(vCollar);
+          const span = Math.hypot(vCollar.x - vHand.x, vCollar.z - vHand.z);
+          const sag = 0.06 + Math.min(0.42, span * 0.12);
+          const arr = leashGeo.attributes.position.array;
+          for (let i = 0; i < 4; i++) {
+            const t = i / 3;
+            arr[i * 3]     = vHand.x + (vCollar.x - vHand.x) * t;
+            arr[i * 3 + 1] = vHand.y + (vCollar.y - vHand.y) * t - Math.sin(Math.PI * t) * sag;
+            arr[i * 3 + 2] = vHand.z + (vCollar.z - vHand.z) * t;
+          }
+          leashGeo.attributes.position.needsUpdate = true;
+          leashGeo.computeBoundingSphere();
+        }
       }
-      leashGeo.attributes.position.needsUpdate = true;
-      leashGeo.computeBoundingSphere();
 
-      /* ---- hai đứa ngồi chơi: mình ngồi lên ghế, ZeroBot ngồi đối diện ---- */
-      const resting = isResting;
+      /* ---- Chế độ 1: Ngồi nghỉ trên ghế đá công viên (khi không làm việc) ---- */
+      const resting = isResting && hermesWorkProgress < 0.05;
       const benchYaw = yaw + Math.PI;            // mặt hướng ra ngoài
       robot.scale.setScalar(resting ? 1.0 : 1.05);
       dog.scale.setScalar(resting ? 1.1 : 1.18);
@@ -1170,12 +1255,74 @@ function buildPals() {
         const ddx = pos.x - dogPos.x, ddz = pos.z - dogPos.z;
         if (ddx * ddx + ddz * ddz > 0.01) dogYaw += (Math.atan2(ddx, ddz) - dogYaw) * Math.min(1, dt / 180);
       } else {
-        robot.rotation.x = 0;
         bench.visible = false;
       }
 
-      robotLabel.position.set(pos.x, pos.y + (resting ? 1.35 : 1.85), pos.z);
-      dogLabel.position.set(dogPos.x, dogPos.y + (resting ? 1.1 : 1.45), dogPos.z);
+      /* ---- Chế độ 2: Hermes đang làm việc -> ngồi ghế gõ máy tính, ZeroBot nằm cạnh ---- */
+      if (hermesWorkProgress > 0.001) {
+        const sitH = hermesWorkProgress;
+        deskHermes.visible = true;
+        deskHermes.scale.setScalar(sitH);
+        deskHermes.position.set(pos.x, topAt(Math.floor(pos.x), Math.floor(pos.z)), pos.z);
+        deskHermes.rotation.y = yaw;
+        if (deskHermes.userData && deskHermes.userData.light) {
+          deskHermes.userData.light.intensity = (0.9 + Math.sin(now * 0.015) * 0.3) * sitH;
+        }
+
+        // Robot ngồi trên ghế làm việc
+        robot.position.y += 0.12 * sitH;
+        robot.rotation.x = 0.08 * sitH;
+        R.legL.rotation.x = -1.35 * sitH;
+        R.legR.rotation.x = -1.35 * sitH;
+
+        // Hai tay gõ luân phiên nhẹ nhàng trên bàn phím
+        const tapL = Math.sin(now * 0.018) * 0.08;
+        const tapR = Math.sin(now * 0.018 + Math.PI) * 0.08;
+        R.armL.rotation.x = (-1.05 + tapL) * sitH + R.armL.rotation.x * (1 - sitH);
+        R.armR.rotation.x = (-1.05 + tapR) * sitH + R.armR.rotation.x * (1 - sitH);
+
+        // ZeroBot nằm nghỉ cạnh bàn
+        D.legFL.rotation.x = 1.35 * sitH;
+        D.legFR.rotation.x = 1.35 * sitH;
+        D.legBL.rotation.x = -0.5 * sitH;
+        D.legBR.rotation.x = -0.5 * sitH;
+        dog.position.y -= 0.04 * sitH;
+        D.tail.rotation.z = Math.sin(now / 220) * 0.35;
+      } else {
+        deskHermes.visible = false;
+      }
+
+      /* ---- Chế độ 3: agy đang làm việc -> bot nhỏ ngồi cạnh bàn gõ máy tính ---- */
+      if (agyWorkProgress > 0.001) {
+        agyGroup.visible = true;
+        const scaleAgy = 0.65 * agyWorkProgress;
+        agyGroup.scale.setScalar(scaleAgy);
+        const agyX = pos.x + Math.cos(yaw) * 1.15;
+        const agyZ = pos.z - Math.sin(yaw) * 1.15;
+        const agyY = topAt(Math.floor(agyX), Math.floor(agyZ));
+        agyGroup.position.set(agyX, agyY, agyZ);
+        agyGroup.rotation.y = yaw - 0.15;
+
+        if (agyBot && agyBot.userData && agyBot.userData.limbs) {
+          const aR = agyBot.userData.limbs;
+          agyBot.position.set(0, 0.12, 0);
+          agyBot.rotation.x = 0.08;
+          aR.legL.rotation.x = -1.35;
+          aR.legR.rotation.x = -1.35;
+          const aTapL = Math.sin(now * 0.022 + 1.2) * 0.08;
+          const aTapR = Math.sin(now * 0.022 + 1.2 + Math.PI) * 0.08;
+          aR.armL.rotation.x = -1.05 + aTapL;
+          aR.armR.rotation.x = -1.05 + aTapR;
+        }
+        if (workstationAgy.userData && workstationAgy.userData.light) {
+          workstationAgy.userData.light.intensity = (0.9 + Math.sin(now * 0.02 + 1.0) * 0.3) * agyWorkProgress;
+        }
+      } else {
+        agyGroup.visible = false;
+      }
+
+      robotLabel.position.set(pos.x, pos.y + (resting ? 1.35 : (hermesWorkProgress > 0.5 ? 1.5 : 1.85)), pos.z);
+      dogLabel.position.set(dogPos.x, dogPos.y + (resting ? 1.1 : (hermesWorkProgress > 0.5 ? 1.1 : 1.45)), dogPos.z);
 
       /* ---- bong bóng nói ---- */
       if (now < sayUntil) {
@@ -1236,6 +1383,67 @@ function zzzSprite() {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   sp.scale.set(1.5, 0.75, 1);
   return sp;
+}
+
+/**
+ * Góc làm việc của bot: bàn + ghế + laptop + đèn màn hình hắt lên mặt.
+ * Hình khối voxel đơn giản, cùng phong cách thế giới.
+ */
+function buildWorkstation() {
+  const g = new THREE.Group();
+  if (typeof THREE.Mesh !== 'function' || typeof THREE.BoxGeometry !== 'function') {
+    g.userData = { light: { intensity: 1 } };
+    return g;
+  }
+  const wood = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+  const woodD = new THREE.MeshLambertMaterial({ color: 0x5c3a1e });
+  const metal = new THREE.MeshLambertMaterial({ color: 0x2e3440 });
+  const keyMat = new THREE.MeshLambertMaterial({ color: 0x4c566a });
+  const screenMat = new THREE.MeshBasicMaterial({ color: 0x88c0d0 });
+
+  const add = (w, h, d, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true; m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+
+  // 1. Cái bàn làm việc (ở trước mặt):
+  add(0.76, 0.05, 0.46, 0, 0.46, 0.35, wood);          // mặt bàn
+  add(0.06, 0.44, 0.06, -0.32, 0.22, 0.16, woodD);     // 4 chân bàn
+  add(0.06, 0.44, 0.06,  0.32, 0.22, 0.16, woodD);
+  add(0.06, 0.44, 0.06, -0.32, 0.22, 0.54, woodD);
+  add(0.06, 0.44, 0.06,  0.32, 0.22, 0.54, woodD);
+
+  // 2. Cái ghế ngồi làm việc:
+  add(0.38, 0.05, 0.36, 0, 0.27, 0, wood);             // mặt ghế
+  add(0.05, 0.25, 0.05, -0.15, 0.125, -0.14, woodD);   // 4 chân ghế
+  add(0.05, 0.25, 0.05,  0.15, 0.125, -0.14, woodD);
+  add(0.05, 0.25, 0.05, -0.15, 0.125,  0.14, woodD);
+  add(0.05, 0.25, 0.05,  0.15, 0.125,  0.14, woodD);
+  add(0.38, 0.36, 0.05, 0, 0.46, -0.16, woodD);        // lưng tựa
+
+  // 3. Laptop trên bàn:
+  add(0.3, 0.02, 0.22, 0, 0.495, 0.32, metal);         // đế máy
+  add(0.26, 0.01, 0.12, 0, 0.51, 0.29, keyMat);        // bàn phím
+  const screenBack = add(0.3, 0.2, 0.02, 0, 0.6, 0.42, metal);
+  screenBack.rotation.x = -0.22;                        // hơi ngửa ra sau
+  const screenGlow = add(0.26, 0.16, 0.01, 0, 0.6, 0.408, screenMat);
+  screenGlow.rotation.x = -0.22;
+
+  // 4. Ánh sáng màn hình hắt lên mặt:
+  let light = null;
+  if (typeof THREE.PointLight === 'function') {
+    light = new THREE.PointLight(0x88c0d0, 1.2, 1.8);
+    light.position.set(0, 0.65, 0.25);
+    g.add(light);
+  } else {
+    light = { intensity: 1 };
+  }
+
+  g.userData = { light, screenGlow };
+  return g;
 }
 
 /* ---------------------------------------------------------------- ghế đá + bong bóng nói
@@ -3027,6 +3235,12 @@ async function pollLive() {
   }
   liveBotsDi = botDangDi;
   if (d.bots) updateBots(d.bots);
+  if (d.botsWorking && botState.has('hermes')) {
+    const cuH = botState.get('hermes');
+    cuH.working = Number(d.botsWorking.hermes) || 0;
+    cuH.agyWorking = Number(d.botsWorking.agy) || 0;
+    cuH.workingAt = Number(d.botsWorking.at) || 0;
+  }
   const myId = me() && me().id;
 
   let needFull = false;
