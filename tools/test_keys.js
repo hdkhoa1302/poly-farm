@@ -84,6 +84,8 @@ const dDiag   = scen('W + D (đi chéo)', () => { held.add('KeyW'); held.add('Ke
 const dStickF = scen('joystick đẩy hết', null, 20, [0, -1]);
 const dStickH = scen('joystick đẩy nửa', null, 20, [0, -0.5]);
 const dNone   = scen('không bấm gì', null, 20, [0, 0]);
+const dAuto   = scen('đang tự dạo + giữ W', () => { global.pals = { walker: { auto: true } }; held.add('KeyW'); });
+global.pals = null;
 
 /* ---------- 4. Q/E xoay camera ---------- */
 console.log('\\n=== 4. Q/E xoay camera (khoảng cách phải giữ nguyên) ===');
@@ -118,6 +120,7 @@ check('đi chéo không nhanh hơn đi thẳng', Math.abs(dDiag - dW) < 1e-9);
 check('joystick đẩy hết cỡ vẫn = chạy (không bị phá)', Math.abs(dStickF - dShift) < 1e-9);
 check('joystick đẩy nửa vẫn = đi thường', Math.abs(dStickH - dW) < 1e-9);
 check('không bấm gì thì đứng yên', dNone === 0);
+check('lúc tự dạo thì bàn phím nhường (không giằng lái)', dAuto === 0);
 console.log('\\nTỔNG: ' + pass + ' đạt, ' + fail + ' hỏng');
 process.exit(fail ? 1 : 0);
 `;
@@ -150,6 +153,7 @@ global.$ = () => ({ classList: { add() {} } });
 global.keyHintDim = false;
 global.tryJump = () => {};
 global.savePosSoon = () => {};
+global.pals = null;                 // chế độ tự dạo của phiên khác; null = ae đang cầm lái
 global.haptic = () => {};
 
 eval(harness);

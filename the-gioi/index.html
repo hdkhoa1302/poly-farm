@@ -2561,7 +2561,7 @@ const chatSeen = new Set();
 const bubbleGroup = new THREE.Group();
 scene.add(bubbleGroup);
 const bubbles = new Map();          // uid -> { sprite, until, ... }
-const BUBBLE_MS = 7000;             // bong bóng nói hiện bao lâu
+const BUBBLE_MS = 9000;             // bong bóng nói hiện bao lâu
 
 /** Vẽ bong bóng nói: nền bo góc, đuôi nhọn, chữ ngắt dòng theo từ. */
 function bubbleSprite(text, hue) {
@@ -2730,6 +2730,9 @@ async function sendChat() {
       chatList.scrollTop = chatList.scrollHeight;
       showBubble(m);
     }
+    // Gửi xong đóng bảng, y như Minecraft: bảng mở là che mất nhân vật, mà bong
+    // bóng vừa hiện trên đầu chỉ thấy được khi bảng đóng lại.
+    if (chatOpen) openChat(false);
     if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
   } else {
     const e = r.body && r.body.error;
