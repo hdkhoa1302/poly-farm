@@ -30,6 +30,7 @@
        cursor:pointer;padding:0;transition:background .15s var(--ease),transform .1s var(--ease)}
   .iconbtn:hover{background:rgba(30,42,64,.85)}
   .iconbtn:active{transform:scale(.94)}
+  .iconbtn.on{background:rgba(120,190,255,.22);color:#dff0ff;box-shadow:inset 0 0 0 1.5px rgba(150,205,255,.55)}
   .iconbtn svg{width:17px;height:17px;display:block}
   .titles{flex:1;min-width:0;background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);
        border-radius:var(--r);padding:7px 11px;min-width:0}
@@ -201,6 +202,7 @@
 <div class="tools">
   <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
   <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
+  <button class="iconbtn" id="walkBtn" title="Dắt ZeroBot đi dạo"><span id="walkIcon"></span></button>
   <button class="iconbtn" id="makeBtn" title="Đổi nhân vật"><span id="makeIcon"></span></button>
   <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
   <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
@@ -358,6 +360,7 @@ const ICONS = {
   'move':'<path d="M12 2v20M2 12h20"/><path d="m9 5 3-3 3 3"/><path d="m9 19 3 3 3-3"/><path d="m5 9-3 3 3 3"/><path d="m19 9 3 3-3 3"/>',
   'rotate':'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
   'box':'<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  'paw':'<circle cx="11" cy="4" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="20" cy="16" r="2"/><path d="M9 10a5 5 0 0 1 5 5v3.5a3.5 3.5 0 0 1-6.84 1.045Q6.52 17.48 4.46 16.84A3.5 3.5 0 0 1 5.5 10Z"/>',
 };
 function svg(name, size = 18) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="${size}" height="${size}">${ICONS[name] || ''}</svg>`;
@@ -379,6 +382,7 @@ $('g7').innerHTML = svg('hand', 16);
 $('toolChev').innerHTML = svg('chevron', 14);
 $('buildIcon').innerHTML = svg('sparkles', 18);
 $('makeIcon').innerHTML = svg('user', 18);
+$('walkIcon').innerHTML = svg('paw', 18);
 $('makeCloseIcon').innerHTML = svg('close', 16);
 $('makeDoneIcon').innerHTML = svg('check', 16);
 $('buildCloseIcon').innerHTML = svg('close', 16);
@@ -655,6 +659,7 @@ function petLimb(g, w, h, d, x, pivotY, z, mat) {
   m.castShadow = true;
   pivot.add(m);
   g.add(pivot);
+  pivot.userData.mesh = m;      // để nhún chân gọn trong thân khi bước
   return pivot;
 }
 
@@ -673,7 +678,7 @@ function buildRobot() {
   petBox(g, 0.02, 0.12, 0.02, 0, 1.14, 0, PET.shellD);       // ăng ten
   petBox(g, 0.05, 0.05, 0.05, 0, 1.22, 0, PET.glow);
   const hand = new THREE.Object3D();
-  hand.position.set(0.23, 0.52, 0.08);                       // chỗ buộc dây dắt
+  hand.position.set(0.2, 0.55, 0.22);                        // chỗ buộc dây dắt (chìa ra trước)
   g.add(hand);
   g.userData = { limbs: { legL, legR, armL, armR }, hand };
   return g;
@@ -712,6 +717,134 @@ leash.frustumCulled = false;
 
 let pals = null;
 
+/* ==================================================================
+ * CHẾ ĐỘ DẠO CHƠI — "tự đi dạo"
+ * ------------------------------------------------------------------
+ * Ae bấm nút 🐾: mình (Hermes) tự nghĩ đường, dắt ZeroBot đi vòng quanh
+ * thế giới, thỉnh thoảng ghé một chỗ trống ngồi chơi với nó một lát rồi
+ * đi tiếp. Lúc đó hai đứa dùng tạm chỗ đứng của người chơi (player.*)
+ * nên server vẫn thấy đúng vị trí, người khác nhìn thấy tụi mình dắt nhau đi.
+ * ================================================================== */
+const WALK_POINTS = [
+  () => 'Đang dắt ZeroBot đi dạo quanh làng…',
+  () => 'Ghé chỗ nào có bóng mát ngồi chơi chút đã…',
+  () => 'ZeroBot đánh hơi thấy gì đó, cho nó rẽ vào xem…',
+  () => 'Ngắm cảnh một lát rồi đi tiếp nhé…'
+];
+
+/* chỗ để "ngồi chơi": ghé bừa một chỗ trống, có ghế đá thì ngồi lên ghế */
+function stepAvail(x, z) {
+  if (!inWorld(Math.floor(x), Math.floor(z))) return false;
+  const h = topAt(Math.floor(x), Math.floor(z));
+  return !player.grounded || h - player.y <= 1.02;      // đang bay thì cứ bay
+}
+
+async function randomSpot() {
+  const members = (WORLD && WORLD.members) || [];
+  for (let i = 0; i < 44; i++) {
+    let ox, oz;
+    if (Math.random() < 0.6 || !members.length) { const o = myOrigin(); ox = o.ox; oz = o.oz; }
+    else { const o = origin(Math.floor(Math.random() * members.length)); ox = o.ox; oz = o.oz; }
+    const x = ox + 0.5 + Math.random() * (PLOT - 1);
+    const z = oz + 0.5 + Math.random() * (PLOT - 1);
+    const cx = Math.floor(x), cz = Math.floor(z);
+    if (!inWorld(cx, cz)) continue;
+    if (topAt(cx, cz) > MAX_Y - 1) continue;             // nóc cao quá thì thôi
+    // đường tới đó không được vướng: lấy 4 mẫu dọc đường
+    let ok = true;
+    const h0 = topAt(Math.floor(player.x), Math.floor(player.z));
+    for (let k = 1; k <= 4 && ok; k++) {
+      const t = k / 4;
+      const sx = Math.floor(player.x + (x - player.x) * t);
+      const sz = Math.floor(player.z + (z - player.z) * t);
+      if (!inWorld(sx, sz) || topAt(sx, sz) - h0 > 1.5) ok = false;
+    }
+    if (!ok) continue;
+    return { x, z, y: topAt(cx, cz) };
+  }
+  return null;
+}
+
+class Walker {
+  constructor() {
+    this.mode = 'walk';       // walk | rest
+    this.way = null;
+    this.legs = 0;            // số chặng đã đi trong vòng này
+    this.cooldown = 6000;
+    this.rest = 0;
+    this.restMax = 11000;
+    this.arrived = 0;
+    this.speed = 3.0;         // chậm hơn người chơi cho ra dáng dắt chó đi dạo
+  }
+
+  /* đang đi mà bị kẹt / tới nơi → chọn chỗ mới; đủ chặng → ghé ngồi chơi */
+  async pick(now) {
+    if (this.legs >= 6) {
+      this.legs = 0;
+      this.mode = 'rest';
+      this.rest = 0;
+      this.restMax = 9000 + Math.random() * 9000;     // 9–18 giây ngồi chơi
+      this.cooldown = 14000 + Math.random() * 12000;  // nghỉ xong đứng dậy đi tiếp
+      pals.say('Ghé đây ngồi chơi chút nhé ZeroBot 🐾');
+      return;
+    }
+    this.cooldown = 5000 + Math.random() * 6000;
+    const p = await randomSpot();
+    if (!p) { this.way = null; return; }
+    this.legs++;
+    this.way = { x: p.x, z: p.z, at: now, rest: p.y };
+    player.yaw = Math.atan2(p.x - player.x, p.z - player.z);
+    pals.say(WALK_POINTS[Math.floor(Math.random() * WALK_POINTS.length)]());
+  }
+
+  /** true = mình đang tự lái; false = nhường lái cho ae */
+  update(dt, now) {
+    if (!player.ready) { this.auto = false; return false; }
+    const driving = Math.hypot(stickVec.x, stickVec.y) > 0.2 || !!(keyVec().x || keyVec().y);
+    const maker = document.getElementById('makePanel');
+    if (driving) {                                   // ae đẩy cần → mình nhường lái
+      this.auto = false;
+      const b = document.getElementById('walkBtn');
+      if (b) b.classList.remove('on');
+    }
+    if (!this.auto || (maker && !maker.hidden)) { this.way = null; return false; }
+
+    if (this.mode === 'walk') {
+      player.moving = true; player.sprint = false;
+      if (!this.way) { this.cooldown -= dt; if (this.cooldown <= 0) this.pick(now); return true; }
+      const d = Math.hypot(this.way.x - player.x, this.way.z - player.z);
+      if (d > 2.5 && now - this.way.at > 3400) { this.way = null; this.cooldown = 0; }   // kẹt
+      else if (d < 0.7) { this.arrived += dt; if (this.arrived > 400) { this.arrived = 0; this.pick(now); } }
+      else {
+        const step = this.speed * dt / 1000;
+        const ux = (this.way.x - player.x) / d, uz = (this.way.z - player.z) / d;
+        const nx = player.x + ux * step, nz = player.z + uz * step;
+        if (stepAvail(nx, nz)) { player.x = nx; player.z = nz; this.arrived = 0; }
+        else if (stepAvail(nx, player.z)) { player.x = nx; this.arrived = 0; }
+        else if (stepAvail(player.x, nz)) { player.z = nz; this.arrived = 0; }
+        else if (player.grounded && player.y < MAX_Y - 1) player.vy = JUMP_V;            // vướng thì nhảy
+      }
+    } else {
+      player.moving = false; player.sprint = false;
+      this.rest += dt;
+      if (this.rest > this.restMax) {
+        this.mode = 'walk'; this.way = null; this.cooldown = 0; this.legs = 0;
+        this.pick(now);
+      }
+    }
+    return true;
+  }
+}
+
+async function spawnWalker() {
+  if (!pals || !pals.walker) return;
+  const w = pals.walker;
+  w.mode = 'walk'; w.way = null; w.legs = 0; w.cooldown = 0; w.arrived = 0; w.rest = 0; w.hintAge = 0;
+  player.ready = true;
+  const p = await randomSpot();
+  if (p) { player.x = p.x; player.z = p.z; const yaw = Math.atan2(p.x - player.x, p.z - player.z); player.yaw = yaw; }
+}
+
 function buildPals() {
   const root = new THREE.Group();
   const robot = buildRobot();
@@ -723,20 +856,34 @@ function buildPals() {
   const pos = new THREE.Vector3(), dogPos = new THREE.Vector3();
   const vHand = new THREE.Vector3(), vCollar = new THREE.Vector3();
   let yaw = 0, dogYaw = 0, placed = false, walk = 0, lastX = 0, lastZ = 0;
+  const bench = buildBench();
+  root.add(bench);
+  const sayBubble = makeBubble(13);            // bong bóng nói của mình
+  const dogBubble = makeBubble(9);             // bong bóng bên chó
+  root.add(sayBubble, dogBubble);
+  let sayUntil = 0, dogSayUntil = 0;
+  const walker = new Walker();
 
   return {
     root,
     frames: 0,
+    walker,
+    say(text, ms) { drawBubble(sayBubble, text, 198, 34); sayUntil = performance.now() + (ms || 3600); },
+    sayDog(text, ms) { drawBubble(dogBubble, text, 38, 30); dogSayUntil = performance.now() + (ms || 2600); },
+    bench,
     update(dt, now, p) {
       this.frames++;
       if (!p.ready) { root.visible = false; return; }
       root.visible = true;
+      const driving = walker.update(dt, now);      // ae lái thì mình đi theo, ae không lái thì mình tự dạo
 
       /* chỗ đứng mong muốn: bên phải và hơi lùi sau chủ nhân */
       const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);   // hướng nhìn
       const rx = fz, rz = -fx;                            // phải của hướng nhìn
-      const tx = p.x - fx * 0.95 + rx * 0.95;
-      const tz = p.z - fz * 0.95 + rz * 0.95;
+      /* tự dạo: mình dẫn trước một quãng, ZeroBot lon ton trước mũi mình */
+      const lead = driving ? -0.95 : 1.15;
+      const tx = p.x - fx * lead + rx * 0.95;
+      const tz = p.z - fz * lead + rz * 0.95;
       if (!placed) { pos.set(tx, 0, tz); dogPos.set(tx, 0, tz + 1); lastX = tx; lastZ = tz; placed = true; }
 
       const k = Math.min(1, dt / 150);
@@ -811,8 +958,38 @@ function buildPals() {
       leashGeo.attributes.position.needsUpdate = true;
       leashGeo.computeBoundingSphere();
 
-      robotLabel.position.set(pos.x, pos.y + 1.85, pos.z);
-      dogLabel.position.set(dogPos.x, dogPos.y + 1.45, dogPos.z);
+      /* ---- hai đứa ngồi chơi: mình ngồi lên ghế, ZeroBot ngồi đối diện ---- */
+      const resting = walker.mode === 'rest';
+      const benchYaw = p.yaw + Math.PI;                 // mặt hướng ra ngoài
+      robot.scale.setScalar(resting ? 1.0 : 1.05);
+      dog.scale.setScalar(resting ? 1.1 : 1.18);
+      if (resting) {
+        pos.y += 0.5;                                   // ngồi lên mặt ghế
+        robot.rotation.x = -0.14;                       // hơi ngả lưng
+        bench.visible = true;
+        bench.position.set(p.x - Math.sin(benchYaw) * 0.22, topAt(Math.floor(p.x), Math.floor(p.z)), p.z - Math.cos(benchYaw) * 0.22);
+        bench.rotation.y = benchYaw + Math.PI;
+        const sitB = { legFL: 1.25, legFR: 1.25, legBL: -0.4, legBR: -0.4 };
+        for (const k in sitB) D[k].rotation.x += (sitB[k] - D[k].rotation.x) * 0.14;
+        dogPos.y += 0.02 + Math.sin(now / 380) * 0.015; // chó ngồi thở nhè nhẹ
+        D.tail.rotation.z = Math.sin(now / 130) * 0.6;
+      } else {
+        robot.rotation.x = 0;
+        bench.visible = false;
+      }
+
+      robotLabel.position.set(pos.x, pos.y + (resting ? 1.35 : 1.85), pos.z);
+      dogLabel.position.set(dogPos.x, dogPos.y + (resting ? 1.1 : 1.45), dogPos.z);
+
+      /* ---- bong bóng nói ---- */
+      if (now < sayUntil) {
+        sayBubble.position.set(pos.x, pos.y + (sayBubble.userData.h || 1) + (resting ? 1.5 : 2.05), pos.z);
+        sayBubble.visible = true;
+      } else sayBubble.visible = false;
+      if (now < dogSayUntil) {
+        dogBubble.position.set(dogPos.x, dogPos.y + (dogBubble.userData.h || 1) + 1.55, dogPos.z);
+        dogBubble.visible = true;
+      } else dogBubble.visible = false;
     }
   };
 }
@@ -825,7 +1002,7 @@ function ensurePals() {
 }
 
 function labelSprite(text, hue) {
-  const pad = 16, fs = 44;
+  const pad = 14, fs = 34;
   const cv = document.createElement('canvas');
   const ctx = cv.getContext('2d');
   ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
@@ -834,7 +1011,7 @@ function labelSprite(text, hue) {
   const c2 = cv.getContext('2d');
   c2.font = `600 ${fs}px Inter, system-ui, sans-serif`;
   c2.fillStyle = 'rgba(10,16,26,.72)';
-  const r = 18, H = cv.height;
+  const r = 14, H = cv.height;
   c2.beginPath();
   c2.moveTo(r, 0); c2.lineTo(w - r, 0); c2.quadraticCurveTo(w, 0, w, r);
   c2.lineTo(w, H - r); c2.quadraticCurveTo(w, H, w - r, H);
@@ -846,7 +1023,7 @@ function labelSprite(text, hue) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  const scale = 0.0135;
+  const scale = 0.0095;   // 44px/0,0135 -> 34px/0,0095: tên gọn lại, không che nhân vật
   sp.scale.set(cv.width * scale, cv.height * scale, 1);
   return sp;
 }
@@ -863,6 +1040,78 @@ function zzzSprite() {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   sp.scale.set(1.5, 0.75, 1);
   return sp;
+}
+
+/* ---------------------------------------------------------------- ghế đá + bong bóng nói
+ * Ghế đá: chỗ hai đứa ghé ngồi chơi. Chỉ để nhìn cho vui, không phải khối xây
+ * nên không đụng tới dữ liệu chung của thế giới.
+ */
+function buildBench() {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshLambertMaterial({ color: 0xb9bcc4 });
+  const stoneD = new THREE.MeshLambertMaterial({ color: 0x9aa0a8 });
+  const add = (w, h, d, x, y, z, m) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z); b.castShadow = true; b.receiveShadow = true; g.add(b);
+  };
+  add(2.2, 0.16, 0.6, 0, 0.46, 0, stone);         // mặt ghế
+  add(0.26, 0.42, 0.5, -0.88, 0.22, 0, stoneD);   // hai chân
+  add(0.26, 0.42, 0.5, 0.88, 0.22, 0, stoneD);
+  add(2.0, 0.5, 0.14, 0, 0.78, -0.3, stoneD);     // lưng tựa
+  return g;
+}
+
+/** Bong bóng nói bay trên đầu — cùng kiểu bong bóng chat của người chơi. */
+function makeBubble(fs) {
+  const cv = document.createElement('canvas');
+  cv.width = 4; cv.height = 4;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.visible = false;
+  return sp;
+}
+
+function drawBubble(sp, text, hue, fs) {
+  fs = fs || 34;
+  const pad = 16, maxW = 400, lh = fs + 10;
+  const cv = document.createElement('canvas');
+  let c = cv.getContext('2d');
+  c.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+  const lines = []; let cur = '';
+  for (const w of String(text).split(' ')) {
+    const t = cur ? cur + ' ' + w : w;
+    if (c.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+  }
+  if (cur) lines.push(cur);
+  const shown = lines.slice(0, 3);
+  const w = Math.ceil(Math.max(...shown.map((l) => c.measureText(l).width))) + pad * 2;
+  const h = shown.length * lh + pad * 2 - 10;
+  cv.width = w; cv.height = h + 16;
+  c = cv.getContext('2d');
+  c.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+  const r = 16;
+  c.fillStyle = 'rgba(10,16,26,.86)';
+  c.strokeStyle = `hsl(${hue == null ? 210 : hue} 60% 58% / .85)`;
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(r, 0); c.lineTo(w - r, 0); c.quadraticCurveTo(w, 0, w, r);
+  c.lineTo(w, h - r); c.quadraticCurveTo(w, h, w - r, h);
+  c.lineTo(w / 2 + 12, h); c.lineTo(w / 2, h + 14); c.lineTo(w / 2 - 12, h);
+  c.lineTo(r, h); c.quadraticCurveTo(0, h, 0, h - r);
+  c.lineTo(0, r); c.quadraticCurveTo(0, 0, r, 0);
+  c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#ffffff'; c.textBaseline = 'middle';
+  shown.forEach((l, i) => c.fillText(l, pad, pad + i * lh + fs / 2 - 2));
+  if (sp.material.map) sp.material.map.dispose();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  sp.material.map = tex;
+  sp.material.needsUpdate = true;
+  const sc = 0.0118;
+  sp.scale.set(cv.width * sc, cv.height * sc, 1);
+  sp.visible = true;
+  sp.userData.h = cv.height * sc;
 }
 
 /* ---------------------------------------------------------------- trạng thái */
@@ -991,7 +1240,7 @@ function renderWorld() {
     peopleGroup.add(p);
 
     const label = labelSprite(m.name + (asleep ? ' · ngủ' : ''), m.hue);
-    label.position.set(px, (asleep ? 0.5 : top + 2.25), pz);
+    label.position.set(px, (asleep ? 0.5 : top + 2.02), pz);
     peopleGroup.add(label);
 
     let zzz = null;
@@ -1221,7 +1470,7 @@ function restack(userId) {
   }
   o.base = top;
   o.group.position.y = top;
-  if (o.label) o.label.position.y = top + 2.25;
+  if (o.label) o.label.position.y = top + 2.02;
 }
 
 /* ---------------------------------------------------------------- palette */
@@ -1300,6 +1549,18 @@ $('home').onclick = () => {
   }
   toast('Đã về lô của bạn', 1400);
 };
+/* Dắt ZeroBot đi dạo: mình tự nghĩ đường, ghé ngồi chơi, hết thì nhường lái */
+let autowalk = false;
+function setAutowalk(on) {
+  autowalk = on;
+  if (pals && pals.walker) pals.walker.auto = on;
+  if (pals && pals.walker && on) { pals.walker.hintAge = 999; }
+  const b = $('walkBtn');
+  if (b) b.classList.toggle('on', !!on);
+  toast(on ? 'Đi dạo thôi ZeroBot! (đẩy cần là ae cầm lái lại)' : 'Đứng lại rồi, ae tự dắt nhé', 2400);
+}
+$('walkBtn').onclick = () => setAutowalk(!autowalk);
+
 $('awake').onclick = () => {
   const list = (WORLD?.members || []);
   const awake = list.filter(m => !m.asleep);
@@ -1433,9 +1694,13 @@ function tick(now) {
   const dt = Math.min(60, Math.max(0, now - t0)); t0 = now;   // chặn dt âm nếu mốc thời gian nhảy lùi
 
   /* ---- đi lại ---- */
+  /* Đang "tự dạo" thì Walker lo chuyện đi đứng (nó cũng tự nhường lái khi ae
+     đẩy joystick) — ở đây chỉ đọc ý ae khi ae thật sự cầm lái. */
+  const autoDriving = pals && pals.walker ? pals.walker.auto : false;
   const kv = keyVec();
-  const mv = { x: Math.max(-1, Math.min(1, stickVec.x + kv.x)),
-               y: Math.max(-1, Math.min(1, stickVec.y + kv.y)) };
+  const mv = autoDriving ? { x: 0, y: 0 }
+    : { x: Math.max(-1, Math.min(1, stickVec.x + kv.x)),
+        y: Math.max(-1, Math.min(1, stickVec.y + kv.y)) };
   const mag = Math.hypot(mv.x, mv.y);
   player.moving = player.ready && mag > 0.14;
   // chạy: joystick đẩy hết cỡ, hoặc giữ Shift khi dùng bàn phím
@@ -1501,7 +1766,7 @@ function tick(now) {
         L.legL.rotation.x = sw; L.legR.rotation.x = -sw;
         L.armL.rotation.x = -sw * 0.75; L.armR.rotation.x = sw * 0.75;
       }
-      o.label.position.set(player.x, player.y + 2.25, player.z);
+      o.label.position.set(player.x, player.y + 2.02, player.z);
       o.base = player.y;
     } else {
       o.group.position.y = o.base + Math.sin(now / 700 + o.base) * 0.035;
@@ -1517,7 +1782,10 @@ function tick(now) {
   for (const [uid, b] of bubbles) {
     const o = local.get(uid);
     if (!o || now > b.until) { dropBubble(uid); continue; }
-    b.sprite.position.set(o.group.position.x, o.group.position.y + 3.4, o.group.position.z);
+    // 2,36 = đỉnh nhãn tên (2,02 + nửa chiều cao) + khe hở. Cộng nửa chiều cao
+    // bong bóng vì sprite neo ở TÂM: tin càng dài càng phải nâng lên, nếu không
+    // bong bóng nhiều dòng sẽ nuốt luôn tên.
+    b.sprite.position.set(o.group.position.x, o.group.position.y + 2.36 + (b.h || 0) / 2, o.group.position.z);
   }
 
   /* ---- camera bám nhân vật ----
@@ -2336,7 +2604,7 @@ function bubbleSprite(text, hue) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  const sc = 0.0105;
+  const sc = 0.0118;
   sp.scale.set(cv.width * sc, cv.height * sc, 1);
   return sp;
 }
@@ -2355,7 +2623,8 @@ function showBubble(m) {
   dropBubble(m.uid);
   const sp = bubbleSprite(m.text, m.hue);
   bubbleGroup.add(sp);
-  bubbles.set(m.uid, { sprite: sp, until: performance.now() + BUBBLE_MS });
+  // nhớ chiều cao để đặt bong bóng NGAY TRÊN tên, không đè lên tên
+  bubbles.set(m.uid, { sprite: sp, until: performance.now() + BUBBLE_MS, h: sp.scale.y });
 }
 
 /** Một dòng tin. Dùng textContent nên chữ người dùng gõ không thể thành HTML. */
@@ -2535,7 +2804,8 @@ boot();
 if (new URLSearchParams(location.search).has('debug')) {
   window.__tg = { get player() { return player; }, get camera() { return camera; },
                   get controls() { return controls; }, held, keyVec, keyDir: KEYDIR,
-                  get stickVec() { return stickVec; }, get renderer() { return renderer; }, tick };
+                  get stickVec() { return stickVec; }, get renderer() { return renderer; }, tick,
+                  bubbles, local, showBubble, sendChat, get chatOpen() { return chatOpen; } };
 }
 </script>
 </body>
