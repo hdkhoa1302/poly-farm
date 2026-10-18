@@ -202,7 +202,7 @@
 <div class="tools">
   <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
   <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
-  <button class="iconbtn on" id="walkBtn" title="Tạm dừng đi dạo (mặc định: Hermes tự dắt ZeroBot đi)"><span id="walkIcon"></span></button>
+  <button class="iconbtn on" id="walkBtn" title="Giữ Hermes &amp; ZeroBot đứng yên tại chỗ (chỉ ở máy bạn — vị trí thật do máy chủ giữ)"><span id="walkIcon"></span></button>
   <button class="iconbtn" id="makeBtn" title="Đổi nhân vật"><span id="makeIcon"></span></button>
   <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
   <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
@@ -389,8 +389,24 @@ $('buildCloseIcon').innerHTML = svg('close', 16);
 $('buildGoIcon').innerHTML = svg('sparkles', 16);
 
 /* ---------------------------------------------------------------- telegram nav */
+/* Mini App được Hub mở trong CÙNG một webview, nên lịch sử có hai mốc: [Hub, app].
+   Một cú lùi lịch sử — vuốt lùi, Backspace, Alt+←, hay phím tắt của hệ điều hành —
+   là bị đẩy thẳng về Hub, đang chơi thì mất cả phiên. Đo được: từ
+   /poly-farm/the-gioi/ lùi một bước ra ngay /poly-farm/.
+   Cách chặn: đẩy thêm MỘT mốc lịch sử cùng-trang rồi bám lấy nó. Lùi một bước chỉ
+   về tới mốc cũ của chính app, popstate đẩy mốc mới vào -> vẫn ở trong game.
+   Ra thật thì phải bấm nút "Về App Hub" (đặt cờ rồi mới đi). */
+let leavingApp = false;
+try { history.pushState({ tgStayApp: 1 }, ''); } catch (e) {}
+addEventListener('popstate', () => {
+  if (leavingApp) return;
+  try { history.pushState({ tgStayApp: 1 }, ''); } catch (e) {}
+  toast('Vừa lùi lịch sử — vẫn ở trong game. Muốn về Hub thì bấm nút góc trên bên trái');
+});
+
 $('back').onclick = () => {
   if (inTg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
+  leavingApp = true;                              // ae chủ động ra thì không chặn
   window.location.href = '../';
 };
 
@@ -653,8 +669,9 @@ function buildPerson(look, asleep) {
  * ------------------------------------------------------------------
  * Hermes: mình, robot nhỏ cầm dây dắt. ZeroBot: con chó vàng lon ton
  * phía trước. Dựng bằng khối vuông cho khớp phong cách thế giới.
- * Không cần server: cả hai bám theo người chơi mỗi khung hình, cao độ
- * lấy từ topAt() nên tự leo lên khối ae xây.
+ * Vị trí của hai đứa do MÁY CHỦ giữ (world_bots) — cả nhóm thấy cùng một chỗ,
+ * và đi đâu thì đi chứ không hiện ra cạnh nhân vật mình. Cao độ lấy từ topAt()
+ * nên tụi nó tự leo lên khối ae xây.
  * ================================================================== */
 const PET = {
   shell:  new THREE.MeshLambertMaterial({ color: 0xe3e9f0 }),
@@ -741,14 +758,55 @@ const leash = new THREE.Line(leashGeo, new THREE.LineBasicMaterial({ color: 0xf0
 leash.frustumCulled = false;
 
 let pals = null;
+const botState = new Map();
+let hasServerBots = false;
+
+function updateBots(list) {
+  if (!Array.isArray(list) || !list.length) return;
+  hasServerBots = true;
+  const now = performance.now();
+  for (const b of list) {
+    if (!b || !b.id) continue;
+    const cur = botState.get(b.id);
+    if (!cur) {
+      botState.set(b.id, {
+        id: b.id,
+        name: b.name || '',
+        baseX: Number(b.x) || 0,
+        baseZ: Number(b.z) || 0,
+        baseAt: now,
+        yaw: Number(b.yaw) || 0,
+        tx: Number(b.tx != null ? b.tx : b.x) || 0,
+        tz: Number(b.tz != null ? b.tz : b.z) || 0,
+        mode: b.mode || 'walk',
+        say: b.say || '',
+        speed: Number(b.speed) || 3.0,
+        at: Number(b.at) || 0
+      });
+    } else {
+      cur.name = b.name || cur.name;
+      cur.yaw = Number(b.yaw != null ? b.yaw : cur.yaw);
+      cur.tx = Number(b.tx != null ? b.tx : b.x);
+      cur.tz = Number(b.tz != null ? b.tz : b.z);
+      cur.mode = b.mode || 'walk';
+      cur.say = b.say || '';
+      cur.speed = Number(b.speed) || 3.0;
+      cur.at = Number(b.at) || cur.at;
+      cur.baseX = Number(b.x);
+      cur.baseZ = Number(b.z);
+      cur.baseAt = now;
+    }
+  }
+}
 
 /* ==================================================================
  * CHẾ ĐỘ DẠO CHƠI — "tự đi dạo"
  * ------------------------------------------------------------------
- * Ae bấm nút 🐾: mình (Hermes) tự nghĩ đường, dắt ZeroBot đi vòng quanh
- * thế giới, thỉnh thoảng ghé một chỗ trống ngồi chơi với nó một lát rồi
- * đi tiếp. Lúc đó hai đứa dùng tạm chỗ đứng của người chơi (player.*)
- * nên server vẫn thấy đúng vị trí, người khác nhìn thấy tụi mình dắt nhau đi.
+ * Ae bấm nút 🐾: nút này giờ chỉ là hành động CỤC BỘ — giữ tụi nó đứng yên tại
+ * chỗ ở máy mình cho dễ ngắm. Vị trí THẬT của hai cá thể do máy chủ giữ (bảng
+ * world_bots trong D1, hàm advanceBots) nên ai vào game cũng thấy tụi nó đang ở
+ * đúng chỗ tụi nó đang ở, không hiện ra cạnh nhân vật mình nữa. Khối dưới đây
+ * (Walker cục bộ) chỉ còn là đường dự phòng khi máy chủ cũ / mất mạng.
  * ================================================================== */
 const WALK_POINTS = [
   () => 'Đang dắt ZeroBot đi dạo quanh làng…',
@@ -910,6 +968,7 @@ function buildPals() {
   const dogBubble = makeBubble(9);             // bong bóng bên chó
   root.add(sayBubble, dogBubble);
   let sayUntil = 0, dogSayUntil = 0;
+  let lastHermesSay = '', lastDogSay = '';
   const walker = new Walker();
 
   return {
@@ -922,30 +981,107 @@ function buildPals() {
     update(dt, now, p) {
       this.frames++;
       if (!p.ready) { root.visible = false; return; }
-      root.visible = true;
-      walker.update(dt, now);                      // hai cá thể tự đi lộ trình của mình
-      if (!walker.placed) {                        // lần đầu: đứng cạnh chủ nhân rồi thả cho đi
-        walker.x = p.x + 1.4; walker.z = p.z + 1.4;
-        walker.yaw = p.yaw; walker.placed = true;
+      let isResting = false;
+
+      if (hasServerBots && botState.has('hermes')) {
+        const bH = botState.get('hermes');
+        const bD = botState.get('zerobot');
+        root.visible = true;
+
+        if (!placed) {
+          pos.set(bH.baseX, topAt(Math.floor(bH.baseX), Math.floor(bH.baseZ)), bH.baseZ);
+          const dzX = bD ? bD.baseX : bH.baseX;
+          const dzZ = bD ? bD.baseZ : bH.baseZ + 1;
+          dogPos.set(dzX, topAt(Math.floor(dzX), Math.floor(dzZ)), dzZ);
+          lastX = pos.x; lastZ = pos.z;
+          yaw = bH.yaw || 0;
+          dogYaw = bD ? (bD.yaw || 0) : yaw;
+          placed = true;
+        }
+
+        if (autowalk) {
+          const elH = Math.max(0, (now - bH.baseAt) / 1000);
+          const dH = Math.hypot(bH.tx - bH.baseX, bH.tz - bH.baseZ);
+          let pxH = bH.baseX, pzH = bH.baseZ;
+          if (bH.mode === 'walk' && dH > 0.01) {
+            const m = Math.min(dH, (bH.speed || 3.0) * elH);
+            pxH += ((bH.tx - bH.baseX) / dH) * m;
+            pzH += ((bH.tz - bH.baseZ) / dH) * m;
+            const ty = Math.atan2(bH.tx - bH.baseX, bH.tz - bH.baseZ);
+            yaw += (ty - yaw) * Math.min(1, dt / 240);
+          }
+
+          let pxD = pxH, pzD = pzH + 1;
+          if (bD) {
+            const elD = Math.max(0, (now - bD.baseAt) / 1000);
+            const dD = Math.hypot(bD.tx - bD.baseX, bD.tz - bD.baseZ);
+            pxD = bD.baseX; pzD = bD.baseZ;
+            if (bD.mode === 'walk' && dD > 0.01) {
+              const m = Math.min(dD, (bD.speed || 3.0) * elD);
+              pxD += ((bD.tx - bD.baseX) / dD) * m;
+              pzD += ((bD.tz - bD.baseZ) / dD) * m;
+              const ty = Math.atan2(bD.tx - bD.baseX, bD.tz - bD.baseZ);
+              dogYaw += (ty - dogYaw) * Math.min(1, dt / 180);
+            }
+          }
+
+          const kw = 1 - Math.exp(-dt / 110);
+          pos.x += (pxH - pos.x) * kw;
+          pos.z += (pzH - pos.z) * kw;
+          pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+
+          if (bD) {
+            dogPos.x += (pxD - dogPos.x) * kw;
+            dogPos.z += (pzD - dogPos.z) * kw;
+            dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+          } else {
+            const kd = Math.min(1, dt / 120);
+            dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
+            dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
+            dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+          }
+        }
+
+        if (bH.say && bH.say !== lastHermesSay) {
+          this.say(bH.say, 3600);
+          lastHermesSay = bH.say;
+        } else if (!bH.say) lastHermesSay = '';
+
+        if (bD && bD.say && bD.say !== lastDogSay) {
+          this.sayDog(bD.say, 2600);
+          lastDogSay = bD.say;
+        } else if (!bD || !bD.say) lastDogSay = '';
+
+        isResting = bH.mode === 'rest';
+      } else if (WORLD && (!WORLD.bots || !WORLD.bots.length)) {
+        root.visible = true;
+        walker.update(dt, now);
+        if (!walker.placed) {
+          walker.x = 24; walker.z = 40; walker.yaw = 0; walker.placed = true;
+        }
+        const tx = walker.x, tz = walker.z;
+        if (!placed) { pos.set(tx, 0, tz); dogPos.set(tx, 0, tz + 1); lastX = tx; lastZ = tz; placed = true; }
+
+        const k = Math.min(1, dt / 150);
+        pos.x += (tx - pos.x) * k; pos.z += (tz - pos.z) * k;
+        pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
+
+        const kd = Math.min(1, dt / 120);
+        dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
+        dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
+        dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+
+        yaw += (walker.yaw - yaw) * Math.min(1, dt / 240);
+        const dxv = dogPos.x - pos.x, dzv = dogPos.z - pos.z;
+        if (dxv * dxv + dzv * dzv > 0.02) {
+          dogYaw += (Math.atan2(dxv, dzv) - dogYaw) * Math.min(1, dt / 180);
+        }
+        isResting = walker.mode === 'rest';
+      } else {
+        root.visible = false;
+        return;
       }
-      const tx = walker.x, tz = walker.z;
-      if (!placed) { pos.set(tx, 0, tz); dogPos.set(tx, 0, tz + 1); lastX = tx; lastZ = tz; placed = true; }
 
-      const k = Math.min(1, dt / 150);
-      pos.x += (tx - pos.x) * k; pos.z += (tz - pos.z) * k;
-      pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
-
-      /* ZeroBot lon ton trước mũi robot */
-      const kd = Math.min(1, dt / 120);
-      dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
-      dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
-      dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
-
-      yaw += (walker.yaw - yaw) * Math.min(1, dt / 240);
-      const dxv = dogPos.x - pos.x, dzv = dogPos.z - pos.z;
-      if (dxv * dxv + dzv * dzv > 0.02) {
-        dogYaw += (Math.atan2(dxv, dzv) - dogYaw) * Math.min(1, dt / 180);
-      }
       robot.position.copy(pos);
       robot.rotation.y = yaw;
       dog.position.copy(dogPos);
@@ -1004,20 +1140,22 @@ function buildPals() {
       leashGeo.computeBoundingSphere();
 
       /* ---- hai đứa ngồi chơi: mình ngồi lên ghế, ZeroBot ngồi đối diện ---- */
-      const resting = walker.mode === 'rest';
-      const benchYaw = walker.yaw + Math.PI;            // mặt hướng ra ngoài
+      const resting = isResting;
+      const benchYaw = yaw + Math.PI;            // mặt hướng ra ngoài
       robot.scale.setScalar(resting ? 1.0 : 1.05);
       dog.scale.setScalar(resting ? 1.1 : 1.18);
       if (resting) {
         pos.y += 0.5;                                   // ngồi lên mặt ghế
         robot.rotation.x = -0.14;                       // hơi ngả lưng
         bench.visible = true;
-        bench.position.set(walker.x - Math.sin(benchYaw) * 0.22, topAt(Math.floor(walker.x), Math.floor(walker.z)), walker.z - Math.cos(benchYaw) * 0.22);
+        bench.position.set(pos.x - Math.sin(benchYaw) * 0.22, topAt(Math.floor(pos.x), Math.floor(pos.z)), pos.z - Math.cos(benchYaw) * 0.22);
         bench.rotation.y = benchYaw + Math.PI;
         const sitB = { legFL: 1.25, legFR: 1.25, legBL: -0.4, legBR: -0.4 };
         for (const k in sitB) D[k].rotation.x += (sitB[k] - D[k].rotation.x) * 0.14;
         dogPos.y += 0.02 + Math.sin(now / 380) * 0.015; // chó ngồi thở nhè nhẹ
         D.tail.rotation.z = Math.sin(now / 130) * 0.6;
+        const ddx = pos.x - dogPos.x, ddz = pos.z - dogPos.z;
+        if (ddx * ddx + ddz * ddz > 0.01) dogYaw += (Math.atan2(ddx, ddz) - dogYaw) * Math.min(1, dt / 180);
       } else {
         robot.rotation.x = 0;
         bench.visible = false;
@@ -1599,16 +1737,22 @@ $('home').onclick = () => {
   }
   toast('Đã về lô của bạn', 1400);
 };
-/* Dắt ZeroBot đi dạo: hai cá thể này KHÔNG có chuyện đứng không — mặc định là
-   tự đi, chỉ nhường lái lúc ae cầm cần (nhả ra là đi tiếp). Nút 🐾 chỉ để tạm dừng. */
+/* Dắt ZeroBot đi dạo: khi có máy chủ giữ vị trí thật của hai cá thể dùng chung cho cả nhóm,
+   nút 🐾 đổi nghĩa thành hành động CỤC BỘ: chỉ đóng băng nội suy ở máy mình để giữ tụi nó
+   đứng yên tại chỗ (tiện ngắm/chụp ảnh), bấm lại thì chạy tiếp theo máy chủ. Tuyệt đối không
+   gửi gì lên máy chủ để tránh ảnh hưởng tới vị trí của người chơi khác. */
 let autowalk = true;
 function setAutowalk(on) {
   autowalk = on;
+  if (on && botState) {
+    const t = performance.now();
+    for (const b of botState.values()) b.baseAt = t;
+  }
   if (pals && pals.walker) pals.walker.auto = on;
   if (pals && pals.walker && on) { pals.walker.hintAge = 999; }
   const b = $('walkBtn');
   if (b) b.classList.toggle('on', !!on);
-  toast(on ? 'Đi dạo thôi ZeroBot! (tụi này đi đường tụi này)' : 'Đứng tạm đây đã nhé', 2400);
+  toast(on ? 'Đi tiếp theo máy chủ nhé (ai cũng thấy tụi này ở chỗ đó)' : 'Đứng yên tại chỗ đã — chỉ ở máy bạn thôi', 3000);
 }
 $('walkBtn').onclick = () => setAutowalk(!autowalk);
 if (pals && pals.walker) pals.walker.auto = autowalk;
@@ -1728,8 +1872,21 @@ function keyVec() {
   if (m > 1) { x /= m; y /= m; }        // đi chéo không nhanh hơn đi thẳng
   return { x, y };
 }
+/* Nút vừa được bấm bằng chuột vẫn giữ focus; gõ Space/Enter sau đó là kích hoạt
+   lại chính nút ấy — kể cả nút "Về App Hub". Người đang chơi thì bỏ focus đi. */
+function boFocusNut() {
+  const a = document.activeElement;
+  if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+}
 addEventListener('keydown', (e) => {
   if (typingIn(e.target)) return;                       // đang gõ chữ → không đi
+  /* Máy gõ tiếng Việt (Unikey/EVKey) khi bỏ dấu hay gửi thêm phím Backspace để xoá
+     ký tự cũ. Đang chơi thì không ô nhập nào giữ phím, nên cái Backspace đó rơi
+     thẳng vào webview và trình duyệt hiểu là "lùi trang" -> văng về Hub. Chặn tại
+     đây. Escape cũng chặn: vài bộ gõ dùng nó để huỷ chữ đang gõ dở, mà Telegram
+     Desktop lại hiểu Escape là đóng Mini App. */
+  if (e.code === 'Backspace' || e.code === 'Escape') { e.preventDefault(); return; }
+  if (KEYDIR[e.code] || e.code === 'Space') boFocusNut();
   if (e.repeat) { if (KEYDIR[e.code] || e.code === 'KeyQ' || e.code === 'KeyE') e.preventDefault(); return; }
   if (e.code === 'Space') { e.preventDefault(); tryJump(); return; }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { keySprint = true; return; }
@@ -1922,6 +2079,7 @@ async function boot() {
     return;
   }
   WORLD = w.body;
+  if (w.body.bots) updateBots(w.body.bots);
   if (MY_PLOT < 0 && u) {
     const mine = (WORLD.members || []).find(m => m.id === u.id);
     if (mine) { MY_PLOT = mine.plot; MY_HUE = mine.hue; }
@@ -2824,6 +2982,7 @@ async function refreshWorld() {
     const w = await get('/world');
     if (w.ok && w.body) {
       WORLD = w.body;
+      if (w.body.bots) updateBots(w.body.bots);
       renderWorld();           // vẽ lại khối + người; người khác giữ nguyên vị trí
     }
   } finally { refreshing = false; }
@@ -2847,6 +3006,21 @@ async function pollLive() {
   const r = await get('/world/live');
   if (!r.ok || !r.body) return;
   const d = r.body;
+
+  /* Hai cá thể của thế giới cũng tính là "đang cử động": có tụi nó đi thì hỏi máy
+     chủ dày hơn. Không tính thì nhịp rơi xuống 1,6 giây, và vì vị trí hiển thị
+     được ngoại suy từ mốc của lần hỏi trước, tụi nó sẽ tụt lại sau máy chủ 1–3
+     đơn vị — người khác nhìn thấy lệch chỗ. */
+  let botDangDi = 0;
+  let botVuaNhic = false;
+  for (const b of (Array.isArray(d.bots) ? d.bots : [])) {
+    if (!b) continue;
+    if (b.mode === 'walk') botDangDi++;
+    const cu = botState.get(b.id);
+    if (cu && (Math.abs(cu.baseX - b.x) > 0.05 || Math.abs(cu.baseZ - b.z) > 0.05)) botVuaNhic = true;
+  }
+  liveBotsDi = botDangDi;
+  if (d.bots) updateBots(d.bots);
   const myId = me() && me().id;
 
   let needFull = false;
@@ -2855,7 +3029,7 @@ async function pollLive() {
 
   const alive = new Set();
   liveOthers = 0;
-  let aiCungCuDong = false;
+  let aiCungCuDong = botVuaNhic;
   for (const m of d.members) {
     alive.add(m.id);
     if (m.id === myId) continue;

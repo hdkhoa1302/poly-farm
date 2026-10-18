@@ -103,3 +103,21 @@ CREATE TABLE IF NOT EXISTS world_chat (
 );
 
 CREATE INDEX IF NOT EXISTS idx_world_chat_at ON world_chat (at);
+
+-- Hai cá thể của thế giới: vị trí THẬT, dùng chung cho cả nhóm.
+CREATE TABLE IF NOT EXISTS world_bots (
+  bot_id     TEXT PRIMARY KEY,                 -- 'hermes' | 'zerobot'
+  name       TEXT    NOT NULL DEFAULT '',
+  x          REAL    NOT NULL DEFAULT 24,      -- điểm neo của chặng đang đi
+  z          REAL    NOT NULL DEFAULT 40,
+  yaw        REAL    NOT NULL DEFAULT 0,       -- radian, atan2(dx, dz)
+  tx         REAL    NOT NULL DEFAULT 24,      -- đích của chặng
+  tz         REAL    NOT NULL DEFAULT 40,
+  mode       TEXT    NOT NULL DEFAULT 'walk',  -- 'walk' | 'rest'
+  legs       INTEGER NOT NULL DEFAULT 0,       -- số chặng đã đi trong vòng này (0..6)
+  leg_at     INTEGER NOT NULL DEFAULT 0,       -- mốc thời gian thực (ms) bắt đầu chặng
+  rest_until INTEGER NOT NULL DEFAULT 0,       -- ms, nghỉ xong lúc nào
+  say        TEXT    NOT NULL DEFAULT '',      -- câu đang nói, rỗng = không nói
+  say_until  INTEGER NOT NULL DEFAULT 0,       -- ms, quá hạn thì xoá `say`
+  ticked_at  INTEGER NOT NULL DEFAULT 0        -- ms lần cuối máy chủ nhích trạng thái
+);

@@ -34,6 +34,7 @@
  *   POST /world/chat             (body initData + text) -> gửi tin
  *   GET  /world/live             -> BẢN NHẸ: vị trí mọi người + số hiệu khối,
  *                                   để app hỏi mỗi ~1 giây (realtime)
+ *   GET  /world/bots             -> vị trí THẬT của Hermes & ZeroBot (công khai)
  *
  * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
  * nên Worker chỉ GHI YÊU CẦU vào hàng đợi; cron ở máy nhặt rồi chạy.
@@ -114,6 +115,7 @@ async function route(request, url, env) {
 
   if (p === '/world' && request.method === 'GET') return worldState(env);
   if (p === '/world/live' && request.method === 'GET') return worldLive(env);
+  if (p === '/world/bots' && request.method === 'GET') return worldBots(env);
   if (p === '/world/chat' && request.method === 'GET') return worldChatList(request, url, env);
   if (p === '/world/chat' && request.method === 'POST') return worldChatSend(request, env);
   if (p === '/world/join' && request.method === 'POST') return worldJoin(request, env);
@@ -531,6 +533,10 @@ async function worldState(env) {
   for (const b of blk.results || []) {
     (byUser[b.user_id] = byUser[b.user_id] || []).push({ x: b.x, y: b.y, z: b.z, t: b.t, obj: b.obj || 0 });
   }
+
+  let bots = [];
+  try { bots = await advanceBots(env, Date.now()); } catch {}
+
   return json({
     ok: true,
     now,
@@ -545,6 +551,7 @@ async function worldState(env) {
       asleep: (now - m.last_seen) > SLEEP_SEC,
       blocks: byUser[m.user_id] || [],
     })),
+    bots,
   });
 }
 
@@ -565,6 +572,9 @@ async function worldLive(env) {
      thay vì đợi nhịp 1,8 giây -> bong bóng nói hiện gần như tức thì. */
   const chat = await env.DB.prepare('SELECT COALESCE(MAX(id),0) AS m FROM world_chat').first();
 
+  let bots = [];
+  try { bots = await advanceBots(env, Date.now()); } catch {}
+
   return json({
     ok: true, now,
     // mã thay đổi của khối: thời điểm sửa mới nhất + số lượng
@@ -576,6 +586,7 @@ async function worldLive(env) {
       seen: m.last_seen,
       asleep: (now - m.last_seen) > SLEEP_SEC,
     })),
+    bots,
   });
 }
 
@@ -931,4 +942,395 @@ async function worldBlock(request, env) {
   ).bind(uid, x, y, z, t, now).run();
 
   return json({ ok: true, placed: true, blocks: replacing ? have : have + 1, obj: 0 });
+}
+
+/* ------------------------------------------------- Hermes & ZeroBot */
+const BOT_SPEED = 3.0;
+const BOT_SAYINGS = {
+  hermes: [
+    'Đang dắt ZeroBot đi dạo quanh làng…',
+    'Ghé chỗ nào có bóng mát ngồi chơi chút đã…',
+    'ZeroBot đánh hơi thấy gì đó, cho nó rẽ vào xem…',
+    'Ngắm cảnh một lát rồi đi tiếp nhé…',
+  ],
+  zerobot: [
+    'Gâu! 🐾',
+    'Gâu gâu!',
+    'Hức hức… 🐾',
+  ],
+};
+
+async function worldBots(env) {
+  let bots = [];
+  try { bots = await advanceBots(env, Date.now()); } catch {}
+  return json({ ok: true, now: Math.floor(Date.now() / 1000), bots });
+}
+
+async function seedBots(env, nowMs) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO world_bots
+       (bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at)
+       VALUES ('hermes', 'Hermes · robot', 26, 30, 0, 26, 30, 'walk', 0, ?, 0, '', 0, 0)`
+    ).bind(nowMs),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO world_bots
+       (bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at)
+       VALUES ('zerobot', 'ZeroBot 🐾', 26, 30, 0, 26, 30, 'walk', 0, ?, 0, '', 0, 0)`
+    ).bind(nowMs),
+  ]);
+}
+
+function pickTarget(botId, curX, curZ, bounds, hermesPos) {
+  const minX = 0.5;
+  const maxX = Math.max(minX + 1, bounds.wx - 0.5);
+  const minZ = 0.5;
+  const maxZ = Math.max(minZ + 1, bounds.wz - 0.5);
+
+  if (botId === 'zerobot') {
+    const hx = hermesPos ? hermesPos.x : curX;
+    const hz = hermesPos ? hermesPos.z : curZ;
+    const distToH = Math.hypot(curX - hx, curZ - hz);
+
+    for (let i = 0; i < 8; i++) {
+      let d, ang;
+      if (distToH < 1.0) {
+        d = 1.6 + Math.random() * 1.4;
+        const baseAng = distToH > 0.01 ? Math.atan2(curX - hx, curZ - hz) : (hermesPos && hermesPos.yaw != null ? hermesPos.yaw + Math.PI : Math.random() * Math.PI * 2);
+        ang = baseAng + (Math.random() - 0.5) * (i * 0.4);
+      } else if (distToH > 2.0) {
+        d = 1.2 + Math.random() * 0.8;
+        ang = Math.atan2(curX - hx, curZ - hz);
+      } else {
+        d = 1.2 + Math.random() * 0.9;
+        if (hermesPos && hermesPos.mode === 'walk') {
+          ang = (hermesPos.yaw + Math.PI) + (Math.random() - 0.5) * 1.0;
+        } else {
+          ang = Math.random() * Math.PI * 2;
+        }
+      }
+
+      const px = hx + Math.sin(ang) * d;
+      const pz = hz + Math.cos(ang) * d;
+      if (px >= minX && px <= maxX && pz >= minZ && pz <= maxZ) {
+        return { tx: Math.round(px * 100) / 100, tz: Math.round(pz * 100) / 100 };
+      }
+    }
+    const ang = Math.random() * Math.PI * 2;
+    const d = 1.8;
+    const px = Math.max(minX, Math.min(maxX, hx + Math.sin(ang) * d));
+    const pz = Math.max(minZ, Math.min(maxZ, hz + Math.sin(ang) * d));
+    return { tx: Math.round(px * 100) / 100, tz: Math.round(pz * 100) / 100 };
+  }
+
+  for (let i = 0; i < 8; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const d = 6 + Math.random() * 20;
+    const px = curX + Math.cos(ang) * d;
+    const pz = curZ + Math.sin(ang) * d;
+    if (px >= minX && px <= maxX && pz >= minZ && pz <= maxZ) {
+      return { tx: Math.round(px * 100) / 100, tz: Math.round(pz * 100) / 100 };
+    }
+  }
+  const px = minX + Math.random() * (maxX - minX);
+  const pz = minZ + Math.random() * (maxZ - minZ);
+  return { tx: Math.round(px * 100) / 100, tz: Math.round(pz * 100) / 100 };
+}
+
+function formatBot(b, cx, cz, cyaw, nowMs) {
+  const isRest = b.mode === 'rest';
+  const rx = Math.round(cx * 100) / 100;
+  const rz = Math.round(cz * 100) / 100;
+  return {
+    id: b.bot_id,
+    name: b.name,
+    x: rx,
+    z: rz,
+    yaw: Math.round(cyaw * 100) / 100,
+    speed: BOT_SPEED,
+    tx: isRest ? rx : Math.round(b.tx * 100) / 100,
+    tz: isRest ? rz : Math.round(b.tz * 100) / 100,
+    mode: b.mode,
+    say: (b.say_until && nowMs < b.say_until) ? (b.say || '') : '',
+    at: b.ticked_at || nowMs,
+  };
+}
+
+async function advanceBots(env, nowMs) {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at
+       FROM world_bots`
+    ).all();
+    let rows = q.results || [];
+    if (rows.length < 2) {
+      await seedBots(env, nowMs);
+      const q2 = await env.DB.prepare(
+        `SELECT bot_id, name, x, z, yaw, tx, tz, mode, legs, leg_at, rest_until, say, say_until, ticked_at
+         FROM world_bots`
+      ).all();
+      rows = q2.results || [];
+    }
+
+    const byId = {};
+    for (const r of rows) byId[r.bot_id] = r;
+    const hermes = byId.hermes;
+    const zerobot = byId.zerobot;
+    if (!hermes || !zerobot) return [];
+
+    const bounds = await worldBounds(env);
+    const updates = [];
+    const result = [];
+    let hermesPos = null;
+
+    for (const b of [hermes, zerobot]) {
+      const oldTickedAt = b.ticked_at;
+      let changed = false;
+
+      if (b.say && nowMs >= b.say_until) {
+        b.say = '';
+        b.say_until = 0;
+        changed = true;
+      }
+
+      if (!b.ticked_at) {
+        b.ticked_at = nowMs;
+        b.leg_at = nowMs;
+        b.old_ticked_at = oldTickedAt;
+        updates.push(b);
+        result.push(formatBot(b, b.x, b.z, b.yaw, nowMs));
+        if (b.bot_id === 'hermes') hermesPos = { x: b.x, z: b.z, yaw: b.yaw, mode: b.mode };
+        continue;
+      }
+
+      let legAt = b.leg_at || nowMs;
+      if (nowMs - legAt > 300000) {
+        legAt = nowMs - 300000;
+        b.leg_at = legAt;
+      }
+
+      let cx = b.x;
+      let cz = b.z;
+      let cyaw = b.yaw;
+
+      for (let iter = 0; iter < 30; iter++) {
+        if (b.mode === 'rest') {
+          const distToHermes = (b.bot_id === 'zerobot' && hermesPos)
+            ? Math.hypot(cx - hermesPos.x, cz - hermesPos.z)
+            : 0;
+          const wakeEarly = b.bot_id === 'zerobot' && (distToHermes > 4 || distToHermes < 1.0);
+          if (nowMs >= b.rest_until || wakeEarly) {
+            b.mode = 'walk';
+            b.legs = 0;
+            const target = pickTarget(b.bot_id, cx, cz, bounds, hermesPos);
+            b.tx = target.tx;
+            b.tz = target.tz;
+            legAt = nowMs;
+            b.leg_at = legAt;
+            const dx = b.tx - cx;
+            const dz = b.tz - cz;
+            if (Math.hypot(dx, dz) > 0.01) {
+              cyaw = Math.atan2(dx, dz);
+              b.yaw = cyaw;
+            }
+            if (Math.random() < 0.35) {
+              const list = BOT_SAYINGS[b.bot_id] || [];
+              b.say = list[Math.floor(Math.random() * list.length)] || '';
+              b.say_until = nowMs + 2600 + Math.floor(Math.random() * 2000);
+            }
+            changed = true;
+          }
+          break;
+        }
+
+        const dx = b.tx - b.x;
+        const dz = b.tz - b.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist <= 0.01) {
+          b.legs += 1;
+          changed = true;
+          const distToHermes = (b.bot_id === 'zerobot' && hermesPos)
+            ? Math.hypot(cx - hermesPos.x, cz - hermesPos.z)
+            : 0;
+          const canRest = b.legs >= 6 && (b.bot_id !== 'zerobot' || ((hermesPos && hermesPos.mode === 'rest') && distToHermes <= 3.5 && distToHermes >= 1.0));
+          if (canRest) {
+            b.mode = 'rest';
+            b.legs = 0;
+            b.rest_until = (legAt || nowMs) + 9000 + Math.floor(Math.random() * 9000);
+            b.tx = cx;
+            b.tz = cz;
+            if (b.bot_id === 'hermes') {
+              b.say = 'Ghé đây ngồi chơi chút nhé ZeroBot 🐾';
+              b.say_until = (legAt || nowMs) + 2600 + Math.floor(Math.random() * 2000);
+            }
+          } else {
+            if (b.legs >= 6 || (b.bot_id === 'zerobot' && (distToHermes > 4 || distToHermes < 1.0))) b.legs = 0;
+            const target = pickTarget(b.bot_id, cx, cz, bounds, hermesPos);
+            b.tx = target.tx;
+            b.tz = target.tz;
+            legAt = nowMs;
+            b.leg_at = legAt;
+            const ndx = b.tx - cx;
+            const ndz = b.tz - cz;
+            if (Math.hypot(ndx, ndz) > 0.01) {
+              cyaw = Math.atan2(ndx, ndz);
+              b.yaw = cyaw;
+            }
+            if (Math.random() < 0.35) {
+              const list = BOT_SAYINGS[b.bot_id] || [];
+              b.say = list[Math.floor(Math.random() * list.length)] || '';
+              b.say_until = nowMs + 2600 + Math.floor(Math.random() * 2000);
+            }
+          }
+          break;
+        }
+
+        const durationMs = (dist / BOT_SPEED) * 1000;
+        const finishAt = legAt + durationMs;
+
+        if (nowMs >= finishAt) {
+          cx = b.tx;
+          cz = b.tz;
+          cyaw = Math.atan2(dx, dz);
+          b.yaw = cyaw;
+          b.x = cx;
+          b.z = cz;
+          b.legs += 1;
+          legAt = finishAt;
+          b.leg_at = legAt;
+          changed = true;
+
+          const distToHermes = (b.bot_id === 'zerobot' && hermesPos)
+            ? Math.hypot(cx - hermesPos.x, cz - hermesPos.z)
+            : 0;
+          const canRest = b.legs >= 6 && (b.bot_id !== 'zerobot' || ((hermesPos && hermesPos.mode === 'rest') && distToHermes <= 3.5 && distToHermes >= 1.0));
+
+          if (canRest) {
+            b.mode = 'rest';
+            b.legs = 0;
+            b.rest_until = finishAt + 9000 + Math.floor(Math.random() * 9000);
+            b.tx = cx;
+            b.tz = cz;
+            if (b.bot_id === 'hermes') {
+              b.say = 'Ghé đây ngồi chơi chút nhé ZeroBot 🐾';
+              b.say_until = finishAt + 2600 + Math.floor(Math.random() * 2000);
+            }
+            if (nowMs >= b.rest_until) {
+              continue;
+            }
+            break;
+          } else {
+            if (b.legs >= 6 || (b.bot_id === 'zerobot' && (distToHermes > 4 || distToHermes < 1.0))) b.legs = 0;
+            const target = pickTarget(b.bot_id, cx, cz, bounds, hermesPos);
+            b.tx = target.tx;
+            b.tz = target.tz;
+            const ndx = b.tx - cx;
+            const ndz = b.tz - cz;
+            if (Math.hypot(ndx, ndz) > 0.01) {
+              cyaw = Math.atan2(ndx, ndz);
+              b.yaw = cyaw;
+            }
+            if (Math.random() < 0.35) {
+              const list = BOT_SAYINGS[b.bot_id] || [];
+              b.say = list[Math.floor(Math.random() * list.length)] || '';
+              b.say_until = finishAt + 2600 + Math.floor(Math.random() * 2000);
+            }
+            continue;
+          }
+        } else {
+          const dt = Math.max(0, Math.min(nowMs - legAt, 300000));
+          const moved = Math.min(dist, (BOT_SPEED * dt) / 1000);
+          const ux = dx / dist;
+          const uz = dz / dist;
+          cx = b.x + ux * moved;
+          cz = b.z + uz * moved;
+          if (dist > 0.01) {
+            cyaw = Math.atan2(ux, uz);
+          }
+          break;
+        }
+      }
+
+      if (b.bot_id === 'hermes') {
+        hermesPos = { x: cx, z: cz, yaw: cyaw, mode: b.mode };
+      } else if (b.bot_id === 'zerobot' && hermesPos) {
+        const curDist = Math.hypot(cx - hermesPos.x, cz - hermesPos.z);
+        if (curDist < 1.0) {
+          const baseAng = curDist > 0.01 ? Math.atan2(cx - hermesPos.x, cz - hermesPos.z) : (hermesPos.yaw != null ? hermesPos.yaw + Math.PI : Math.random() * Math.PI * 2);
+          let pushed = false;
+          for (let off = 0; off <= Math.PI; off += 0.2) {
+            for (const s of [1, -1]) {
+              const ang = baseAng + s * off;
+              const px = hermesPos.x + Math.sin(ang) * 1.25;
+              const pz = hermesPos.z + Math.cos(ang) * 1.25;
+              if (px >= 0.5 && px <= bounds.wx - 0.5 && pz >= 0.5 && pz <= bounds.wz - 0.5) {
+                cx = px;
+                cz = pz;
+                pushed = true;
+                break;
+              }
+            }
+            if (pushed) break;
+          }
+          if (!pushed) {
+            const toCenter = Math.atan2(bounds.wx / 2 - hermesPos.x, bounds.wz / 2 - hermesPos.z);
+            cx = Math.max(0.5, Math.min(bounds.wx - 0.5, hermesPos.x + Math.sin(toCenter) * 1.25));
+            cz = Math.max(0.5, Math.min(bounds.wz - 0.5, hermesPos.z + Math.cos(toCenter) * 1.25));
+          }
+          b.x = cx;
+          b.z = cz;
+          b.mode = 'walk';
+          b.legs = 0;
+          const target = pickTarget(b.bot_id, cx, cz, bounds, hermesPos);
+          b.tx = target.tx;
+          b.tz = target.tz;
+          legAt = nowMs;
+          b.leg_at = legAt;
+          const ndx = b.tx - cx;
+          const ndz = b.tz - cz;
+          if (Math.hypot(ndx, ndz) > 0.01) cyaw = Math.atan2(ndx, ndz);
+          b.yaw = cyaw;
+          changed = true;
+        }
+      }
+
+      if (b.say && b.say_until && nowMs >= b.say_until) {
+        b.say = '';
+        b.say_until = 0;
+      }
+
+      if (changed) {
+        b.old_ticked_at = oldTickedAt;
+        b.ticked_at = nowMs;
+        updates.push(b);
+      }
+
+      result.push(formatBot(b, cx, cz, cyaw, nowMs));
+    }
+
+    if (updates.length > 0) {
+      const stmt = env.DB.prepare(
+        `UPDATE world_bots SET
+           x = ?, z = ?, yaw = ?, tx = ?, tz = ?,
+           mode = ?, legs = ?, leg_at = ?, rest_until = ?,
+           say = ?, say_until = ?, ticked_at = ?
+         WHERE bot_id = ? AND ticked_at = ?`
+      );
+      await env.DB.batch(
+        updates.map((u) =>
+          stmt.bind(
+            u.x, u.z, u.yaw, u.tx, u.tz,
+            u.mode, u.legs, u.leg_at, u.rest_until,
+            u.say, u.say_until, nowMs,
+            u.bot_id, u.old_ticked_at
+          )
+        )
+      );
+    }
+
+    return result;
+  } catch {
+    return [];
+  }
 }

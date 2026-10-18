@@ -306,15 +306,34 @@ function showGate(kind, who) {
   $('bar').hidden = true;
   $('gateIcon').innerHTML = window.Icons ? Icons.get(g[0], 24) : '';
   $('gateTitle').textContent = g[1];
-  $('gateText').innerHTML = esc(g[2]) + (who ? '<br><br>Đang xin cho: <b>' + esc(who) + '</b>' : '');
+  /* Mã lỗi lạ (403 với lý do mới chưa có trong GATES) thì in luôn mã ra: đừng để
+     một lỗi quyền bị hiển thị thành "mạng hỏng" rồi ae đi tìm mạng. */
+  const them = GATES[kind] ? '' : ' <span style="opacity:.6">(mã: ' + esc(String(kind)) + ')</span>';
+  $('gateText').innerHTML = esc(g[2]) + them
+    + (who ? '<br><br>Đang xin cho: <b>' + esc(who) + '</b>' : '')
+    + (inTg && kind !== 'no-tg' ? '<br><br><a href="#" id="gateAsk">Mở nhóm để xin quyền</a>' : '');
   $('listLabel').hidden = true;
   $('status').textContent = 'Chưa mở được';
   if (inTg) {
     const btn = $('gateBtn');
     btn.hidden = false;
-    btn.textContent = 'Mở nhóm để xin quyền';
-    btn.onclick = () => { try { tg.openTelegramLink(GATE_HREF); } catch (e) {} };
+    /* Lỗi mạng / máy chủ chập: nút phải là THỬ LẠI. Chỉ khi thật sự là chuyện
+       quyền (chưa có tên trong sổ) thì mới mời ae ra nhóm xin. */
+    if (kind === 'offline' || !GATES[kind]) {
+      btn.textContent = 'Thử lại';
+      btn.onclick = () => {
+        btn.disabled = true;
+        showSkeletons();
+        $('status').textContent = 'Đang thử lại…';
+        Promise.resolve(loadFirst()).finally(() => { btn.disabled = false; });
+      };
+    } else {
+      btn.textContent = 'Mở nhóm để xin quyền';
+      btn.onclick = () => { try { tg.openTelegramLink(GATE_HREF); } catch (e) {} };
+    }
   }
+  const ask = $('gateAsk');
+  if (ask) ask.onclick = (e) => { e.preventDefault(); try { tg.openTelegramLink(GATE_HREF); } catch (err) {} };
 }
 
 /* ---------------- skeleton ---------------- */
@@ -493,8 +512,25 @@ $('list').addEventListener('toggle', onToggle, true);
 $('tl').addEventListener('toggle', onToggle, true);
 
 /* ---------------- phân trang + lazy load ---------------- */
+/* Mạng di động chập một nhịp, hoặc Worker vừa "nguội" phải khởi động lại, là chuyện
+   thường — nhưng dựng nguyên một màn "Không kết nối được" vì một nhịp hỏng thì ae
+   tưởng app hỏng và đóng luôn. Thử lại vài lần rồi mới báo. */
+const RETRY_WAIT = [700, 1800, 4000];
+async function apiRetry(path) {
+  let r = await api(path);
+  for (let i = 0; i < RETRY_WAIT.length; i++) {
+    /* 200 = được · 403 = máy chủ trả lời rõ ràng (thiếu quyền) · 429 = bị chặn tạm:
+       ba loại này KHÔNG phải lỗi mạng, thử lại cũng vô ích. */
+    if (r.status === 200 || r.status === 403 || r.status === 429) return r;
+    $('status').textContent = 'Mạng chập, đang thử lại…';
+    await new Promise((res) => setTimeout(res, RETRY_WAIT[i]));
+    r = await api(path);
+  }
+  return r;
+}
+
 async function loadPage(offset) {
-  const r = await api('/digests?limit=' + PAGE + '&offset=' + offset);
+  const r = await apiRetry('/digests?limit=' + PAGE + '&offset=' + offset);
   if (r.status === 403) { showGate((r.body && r.body.error) || 'not-member', cache.who && cache.who.name); return null; }
   if (r.status !== 200 || !r.body) return null;
   return r.body;
@@ -685,6 +721,13 @@ $('back').onclick = () => {
   loadFirst();
   refreshAsk();
   setInterval(loadFirst, 60000);
+  /* Đang kẹt ở màn "Không kết nối được" mà quay lại app (hoặc app được đưa lên
+     trước) thì thử lấy dữ liệu ngay, đừng để ae ngồi nhìn màn lỗi tới 60 giây. */
+  const retryIfStuck = () => {
+    if (!$('gate').hidden && $('gateTitle').textContent === GATES['offline'][1]) loadFirst();
+  };
+  if (tg.onEvent) { try { tg.onEvent('activated', retryIfStuck); } catch (e) {} }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) retryIfStuck(); });
 })();
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
