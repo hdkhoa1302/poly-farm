@@ -817,6 +817,7 @@ function ensurePals() {
   if (pals) return;
   pals = buildPals();
   scene.add(pals.root);
+  window.__pals = pals;      // móc gỡ lỗi: soi vị trí/animation từ console khi cần
 }
 
 function labelSprite(text, hue) {
@@ -2529,7 +2530,7 @@ boot();
 if (new URLSearchParams(location.search).has('debug')) {
   window.__tg = { get player() { return player; }, get camera() { return camera; },
                   get controls() { return controls; }, held, keyVec, keyDir: KEYDIR,
-                  get stickVec() { return stickVec; } };
+                  get stickVec() { return stickVec; }, tick };
 }
 </script>
 </body>
