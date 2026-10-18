@@ -454,6 +454,7 @@ const API = 'https://games-hub-api.hdkhoa1302.workers.dev';
 const OWNER_ID = 780469718;            // chỉ user này thấy nút xoá (Worker kiểm lại)
 const LS_HIDDEN = 'hub_hidden_v1';
 const LS_ORDER = 'hub_order_v1';
+const LS_GONE = 'hub_gone_v1';    // app chủ sở hữu đã xoá (nhớ trong máy)
 
 const list = document.getElementById('app-list');
 const empty = document.getElementById('empty');
@@ -469,7 +470,12 @@ function lsSave(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catc
 
 let hidden = lsSet(LS_HIDDEN);   // app người dùng tự ẩn (chỉ máy này)
 let order = lsArr(LS_ORDER);     // thứ tự người dùng tự kéo (chỉ máy này)
-let gone = new Set();            // app chủ sở hữu đã xoá (mọi người)
+/* App chủ sở hữu đã xoá (mọi người). Phải nhớ trong máy và vẽ đúng NGAY từ
+   khung hình đầu: không nhớ thì Hub vẽ ra đủ app, chờ máy chủ trả lời rồi mới
+   thu gọn lại — nhìn thấy rõ những app đã xoá hiện ra rồi biến mất. */
+const goneCache = (() => { try { return localStorage.getItem(LS_GONE); } catch (e) { return null; } })();
+let gone = lsSet(LS_GONE);
+let goneKnown = goneCache !== null;
 let manage = false;              // đang ở chế độ Sửa
 let showAll = false;             // đang cho hiện cả app bị ẩn
 let renderCount = 0;             // để animation chỉ chạy lần vẽ đầu
@@ -591,6 +597,8 @@ async function wipeApp(app) {
       return;
     }
     gone.add(app.id);
+    goneKnown = true;
+    lsSave(LS_GONE, [...gone]);
   } catch (e) {
     setStatus('Không xoá được — mạng lỗi.');
     return;
@@ -602,8 +610,12 @@ async function wipeApp(app) {
 async function loadDeleted() {
   try {
     const r = await fetch(API + '/apps');
-    if (r.ok) gone = new Set((await r.json()).deleted || []);
-  } catch (e) { /* offline: dùng danh sách mặc định */ }
+    if (r.ok) {
+      gone = new Set((await r.json()).deleted || []);
+      goneKnown = true;
+      lsSave(LS_GONE, [...gone]);          // lần sau vẽ đúng ngay, không chớp
+    }
+  } catch (e) { /* offline: dùng danh sách đã nhớ trong máy */ }
   render();
 }
 
@@ -707,8 +719,17 @@ document.getElementById('manage').addEventListener('click', () => {
   render();
 });
 
-render();
-loadDeleted();
+/* Biết danh sách app đã xoá rồi (nhớ trong máy) → vẽ ngay khung hình đầu.
+   Chưa biết (lần đầu vào máy này) → chờ máy chủ trả lời rồi mới vẽ, kèm chốt
+   2,5 giây phòng mạng chậm, để không bao giờ hiện ra rồi mới thu gọn. */
+if (goneKnown) {
+  render();
+  loadDeleted();
+} else {
+  setStatus('Đang tải…');
+  const chotAnToan = setTimeout(render, 2500);
+  loadDeleted().then(() => clearTimeout(chotAnToan));
+}
 
 /* ---------------- ghi danh vào "Thế Giới Của Ae" ----------------
  * Ai ghé Hub cũng thành một cư dân trong thế giới 3D (có lô đất riêng),
