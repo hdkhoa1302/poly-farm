@@ -202,7 +202,7 @@
 <div class="tools">
   <button class="iconbtn" id="home" title="Về lô của tôi"><span id="homeIcon"></span></button>
   <button class="iconbtn" id="awake" title="Ai đang thức"><span id="awakeIcon"></span></button>
-  <button class="iconbtn" id="walkBtn" title="Dắt ZeroBot đi dạo"><span id="walkIcon"></span></button>
+  <button class="iconbtn on" id="walkBtn" title="Tạm dừng đi dạo (mặc định: Hermes tự dắt ZeroBot đi)"><span id="walkIcon"></span></button>
   <button class="iconbtn" id="makeBtn" title="Đổi nhân vật"><span id="makeIcon"></span></button>
   <button class="iconbtn" id="buildBtn" title="Tạo vật thể bằng mô tả"><span id="buildIcon"></span></button>
   <button class="iconbtn" id="chatBtn" title="Chat trong thế giới"><span id="chatIcon"></span><i class="badge" id="chatBadge" hidden></i></button>
@@ -766,6 +766,7 @@ async function randomSpot() {
 }
 
 class Walker {
+  auto = true;                 // hai cá thể này mặc định tự đi (không cần ae bật)
   constructor() {
     this.mode = 'walk';        // walk | rest
     this.way = null;
@@ -796,19 +797,26 @@ class Walker {
     if (Math.random() < 0.45) pals.sayDog(['Gâu! 🐾', 'Gâu gâu!', 'Hức hức… 🐾', 'Gâu! (đi đâu đó?)'][Math.floor(Math.random() * 4)], 2000);
   }
 
-  /** true = mình đang tự lái; false = nhường lái cho ae */
+  /** true = mình đang tự lái; false = nhường lái cho ae (nhả ra là tự đi tiếp) */
   update(dt, now) {
-    if (!player.ready) { this.auto = false; return false; }
-    const driving = Math.hypot(stickVec.x, stickVec.y) > 0.2 || !!(keyVec().x || keyVec().y);
-    const maker = document.getElementById('makePanel');
-    if (driving) {                                   // ae đẩy cần → mình nhường lái
-      this.auto = false;
-      const b = document.getElementById('walkBtn');
-      if (b) b.classList.remove('on');
+    if (!player.ready) return false;
+    this.driving = Math.hypot(stickVec.x, stickVec.y) > 0.2 || !!(keyVec().x || keyVec().y);
+    /* ae đang mở bảng nào (chat · tạo vật thể · tạo nhân vật) thì mình đứng im
+       cho ae làm việc, không lôi đi lung tung */
+    const panelOpen = ['makePanel', 'chatPanel', 'buildPanel'].some((id) => {
+      const el = document.getElementById(id);
+      return el && el.classList.contains('on');
+    });
+    /* Lưu ý: mấy bảng này bật/tắt bằng class .on chứ KHÔNG phải thuộc tính hidden —
+       kiểm tra nhầm một lần là chế độ đi dạo chết ngay từ đầu. */
+    if (this.driving || !this.auto || panelOpen) {
+      this.way = null;
+      return false;
     }
-    /* bảng tạo nhân vật đang mở thì đứng im (bảng này bật/tắt bằng class .on,
-       KHÔNG phải thuộc tính hidden — kiểm tra nhầm là đi dạo chết ngay từ đầu) */
-    if (!this.auto || (maker && maker.classList.contains('on'))) { this.way = null; return false; }
+    if (!this.way && this.nextPickAt < now - 3000) {
+      // vừa được nhả lái (hoặc mới vào) → cất bước luôn, không đứng ngơ
+      this.legs = 0; this.nextPickAt = now;
+    }
 
     if (this.mode === 'walk') {
       player.moving = true; player.sprint = false;
@@ -1552,17 +1560,19 @@ $('home').onclick = () => {
   }
   toast('Đã về lô của bạn', 1400);
 };
-/* Dắt ZeroBot đi dạo: mình tự nghĩ đường, ghé ngồi chơi, hết thì nhường lái */
-let autowalk = false;
+/* Dắt ZeroBot đi dạo: hai cá thể này KHÔNG có chuyện đứng không — mặc định là
+   tự đi, chỉ nhường lái lúc ae cầm cần (nhả ra là đi tiếp). Nút 🐾 chỉ để tạm dừng. */
+let autowalk = true;
 function setAutowalk(on) {
   autowalk = on;
   if (pals && pals.walker) pals.walker.auto = on;
   if (pals && pals.walker && on) { pals.walker.hintAge = 999; }
   const b = $('walkBtn');
   if (b) b.classList.toggle('on', !!on);
-  toast(on ? 'Đi dạo thôi ZeroBot! (đẩy cần là ae cầm lái lại)' : 'Đứng lại rồi, ae tự dắt nhé', 2400);
+  toast(on ? 'Đi dạo thôi ZeroBot! (đẩy cần là ae cầm lái lại)' : 'Đứng tạm đây đã nhé', 2400);
 }
 $('walkBtn').onclick = () => setAutowalk(!autowalk);
+if (pals && pals.walker) pals.walker.auto = autowalk;
 
 $('awake').onclick = () => {
   const list = (WORLD?.members || []);
@@ -1699,7 +1709,7 @@ function tick(now) {
   /* ---- đi lại ---- */
   /* Đang "tự dạo" thì Walker lo chuyện đi đứng (nó cũng tự nhường lái khi ae
      đẩy joystick) — ở đây chỉ đọc ý ae khi ae thật sự cầm lái. */
-  const autoDriving = pals && pals.walker ? pals.walker.auto : false;
+  const autoDriving = pals && pals.walker ? (pals.walker.auto && !pals.walker.driving) : false;
   const kv = keyVec();
   const mv = autoDriving ? { x: 0, y: 0 }
     : { x: Math.max(-1, Math.min(1, stickVec.x + kv.x)),
