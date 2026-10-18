@@ -218,29 +218,52 @@ function check(name, ok, extra) {
   check('Chỗ dự phòng cách xa người chơi (> 20 đơn vị)', distFbPlayer > 20, 'cách: ' + distFbPlayer.toFixed(2));
 
   console.log('');
-  console.log('=== 5. Worker advanceBots: vị trí được lưu vào D1 và sống qua redeploy ===');
+  console.log('=== 5. Worker advanceBots: vị trí suy ra từ mốc thời gian, sống qua redeploy ===');
   const mockDB = createMockD1();
   const env = { DB: mockDB };
-  // Lần đầu khởi tạo
   let bots1 = await advanceBots(env, 10000);
   check('Khởi tạo ban đầu trả về 2 bot', bots1.length === 2);
   const hInit = bots1.find(b => b.id === 'hermes');
   check('Bot khởi tạo ở vị trí cố định', hInit && hInit.x === 26 && hInit.z === 30);
 
-  // Lần 2: 11000ms nhận target chặng đầu
-  await advanceBots(env, 11000);
-  // Lần 3: 12000ms bot đã di chuyển được 1 giây (~3 đơn vị)
-  let bots3 = await advanceBots(env, 12000);
-  const hMoved = bots3.find(b => b.id === 'hermes');
-  const d1Hermes = mockDB.store.get('hermes');
-  check('D1 đã ghi lại toạ độ mới sau khi di chuyển', d1Hermes && (d1Hermes.x !== 26 || d1Hermes.z !== 30), 'D1 x=' + d1Hermes.x + ' z=' + d1Hermes.z + ' tx=' + d1Hermes.tx);
+  await advanceBots(env, 11000);                       // chọn chặng đầu
+  const neo = (await advanceBots(env, 11000)).find(b => b.id === 'hermes');
+  const hMoved = (await advanceBots(env, 14000)).find(b => b.id === 'hermes');   // +3 giây
+  const diDuoc = Math.hypot(hMoved.x - neo.x, hMoved.z - neo.z);
+  check('3 giây giữa chặng đi được ~9 đơn vị (3,0 đv/giây)', diDuoc > 8.5 && diDuoc <= 9.05,
+    'đi được ' + diDuoc.toFixed(2));
 
-  // Mô phỏng Worker deploy lại sau 30 giây (gap > 15s)
-  // Worker mới được cấp instance mới, đọc từ DB
-  const botsRedeploy = await advanceBots(env, 42000);
-  const hAfterRedeploy = botsRedeploy.find(b => b.id === 'hermes');
-  check('Sau khi redeploy, bot vẫn ở đúng vị trí đã lưu trong D1', hAfterRedeploy && Math.abs(hAfterRedeploy.x - d1Hermes.x) < 0.05 && Math.abs(hAfterRedeploy.z - d1Hermes.z) < 0.05, 'bot x=' + hAfterRedeploy.x + ' d1 x=' + d1Hermes.x);
-  check('Sau khi redeploy, bot không bị giật về 0,0 hay vị trí ban đầu', hAfterRedeploy && (hAfterRedeploy.x > 0 && hAfterRedeploy.z > 0));
+  /* Vị trí là HÀM CỦA THỜI GIAN: hỏi lại cùng mốc giờ phải ra đúng chỗ đó, dù đã hỏi
+     bao nhiêu lần — nhờ vậy không phải ghi D1 mỗi nhịp hỏi. */
+  const lai = (await advanceBots(env, 14000)).find(b => b.id === 'hermes');
+  check('hỏi lại cùng mốc giờ → đúng vị trí đó (không phụ thuộc số lần hỏi)',
+    Math.abs(lai.x - hMoved.x) < 0.01 && Math.abs(lai.z - hMoved.z) < 0.01);
+  const d1Hermes = mockDB.store.get('hermes');
+  check('D1 giữ điểm neo + mốc giờ của chặng (đủ để suy ra vị trí, khỏi ghi mỗi nhịp)',
+    d1Hermes && Number.isFinite(d1Hermes.leg_at) && Number.isFinite(d1Hermes.tx),
+    'neo x=' + d1Hermes.x + ' z=' + d1Hermes.z + ' leg_at=' + d1Hermes.leg_at);
+
+  /* "Worker deploy lại": instance mới đọc từ D1 — phải ra đúng chỗ vừa thấy. */
+  const hAfterRedeploy = (await advanceBots(env, 14500)).find(b => b.id === 'hermes');
+  const lech = Math.hypot(hAfterRedeploy.x - hMoved.x, hAfterRedeploy.z - hMoved.z);
+  check('Sau khi deploy lại: đúng chỗ vừa thấy, không nhảy về chỗ gieo', lech < 2,
+    'lệch ' + lech.toFixed(2));
+  check('Sau khi deploy lại: vẫn ở trong thế giới, không về 0,0',
+    hAfterRedeploy.x > 0 && hAfterRedeploy.z > 0);
+
+  /* Quãng dài không ai ngó (> 15 giây): đi nốt chặng đang đi rồi đứng lại bắt chặng mới
+     — KHÔNG chạy bù một chuỗi chặng ngẫu nhiên (trôi đi đâu mất), cũng không tụt về neo. */
+  const truoc = { x: hAfterRedeploy.x, z: hAfterRedeploy.z, tx: hAfterRedeploy.tx, tz: hAfterRedeploy.tz };
+  const hNghi = (await advanceBots(env, 400000)).find(b => b.id === 'hermes');
+  const diThem = Math.hypot(hNghi.x - truoc.x, hNghi.z - truoc.z);
+  const conLai = Math.hypot(truoc.tx - truoc.x, truoc.tz - truoc.z);
+  check('quãng dài: chỉ đi nốt chặng cũ rồi dừng (không trôi đi xa)',
+    diThem <= conLai + 0.5 && diThem < 30,
+    'đi thêm ' + diThem.toFixed(2) + ' · chặng còn ' + conLai.toFixed(2));
+  const hSau = (await advanceBots(env, 402000)).find(b => b.id === 'hermes');
+  check('sau quãng dài: đi tiếp chặng mới một cách bình thường (≤ 6 đơn vị / 2 giây)',
+    Math.hypot(hSau.x - hNghi.x, hSau.z - hNghi.z) <= 6.05,
+    'đi được ' + Math.hypot(hSau.x - hNghi.x, hSau.z - hNghi.z).toFixed(2));
 
   console.log('');
   console.log('TỔNG: ' + pass + ' đạt, ' + fail + ' hỏng');
@@ -264,6 +287,9 @@ fs.writeFileSync(file, [
 
 try {
   execFileSync(process.execPath, [file], { stdio: 'inherit' });
-} finally {
-  fs.unlinkSync(file);
+} catch (e) {
+  console.error('\n--- hỏng: giữ lại file chạy tạm để soi: ' + file);
+  console.error('--- chạy tay:  node ' + file);
+  throw e;
 }
+if (!process.env.GIU_FILE_TAM) fs.unlinkSync(file);

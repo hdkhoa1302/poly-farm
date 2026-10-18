@@ -1103,26 +1103,32 @@ async function advanceBots(env, nowMs) {
         continue;
       }
 
-      // Khi Worker vừa deploy lại hoặc lâu không có người (gap > 15s):
-      // Giữ nguyên vị trí đã lưu trong D1, không chạy bù 30 chặng trong hư vô.
-      if (b.ticked_at && nowMs - b.ticked_at > 15000) {
-        b.leg_at = nowMs;
-        b.ticked_at = nowMs;
+      /* Lâu không ai ngó tới (Worker vừa deploy lại, cả nhóm đi ngủ…): chặng đang đi
+         coi như đã đi hết — hai đứa đứng ở đích rồi bắt đầu chặng mới từ BÂY GIỜ.
+         - Không chạy bù một chuỗi chặng ngẫu nhiên trong hư vô (đi đâu mất tiêu).
+         - Cũng KHÔNG tụt về điểm neo của chặng cũ: vị trí suy ra từ mốc thời gian
+           nên chỉ tiến tới đích, đúng như nếu có người đứng nhìn suốt. */
+      const gapMs = nowMs - (b.leg_at || nowMs);
+      if (gapMs > 15000) {
         b.old_ticked_at = oldTickedAt;
-        if (b.mode === 'rest') {
-          if (nowMs >= b.rest_until) {
-            b.mode = 'walk';
-            b.legs = 0;
-            const target = pickTarget(b.bot_id, b.x, b.z, bounds, hermesPos);
-            b.tx = target.tx;
-            b.tz = target.tz;
-          }
+        b.ticked_at = nowMs;
+        b.leg_at = nowMs;
+        b.legs = 0;
+        if (b.mode === 'rest' && nowMs < b.rest_until) {
+          /* vẫn đang trong giờ ngồi nghỉ: đứng yên tại chỗ đã lưu, chỉ dời mốc giờ */
         } else {
-          const remDist = Math.hypot(b.tx - b.x, b.tz - b.z);
-          if (remDist <= 0.1) {
-            const target = pickTarget(b.bot_id, b.x, b.z, bounds, hermesPos);
-            b.tx = target.tx;
-            b.tz = target.tz;
+          const legLen = Math.hypot(b.tx - b.x, b.tz - b.z);
+          if (legLen > 0.01 && b.mode !== 'rest') {
+            b.yaw = Math.atan2(b.tx - b.x, b.tz - b.z);   // tới đích chặng đang đi
+            b.x = b.tx;
+            b.z = b.tz;
+          }
+          b.mode = 'walk';
+          const target = pickTarget(b.bot_id, b.x, b.z, bounds, hermesPos);
+          b.tx = target.tx;
+          b.tz = target.tz;
+          if (Math.hypot(b.tx - b.x, b.tz - b.z) > 0.01) {
+            b.yaw = Math.atan2(b.tx - b.x, b.tz - b.z);
           }
         }
         updates.push(b);
@@ -1276,14 +1282,10 @@ async function advanceBots(env, nowMs) {
           if (dist > 0.01) {
             cyaw = Math.atan2(ux, uz);
           }
-          if (moved > 0.001) {
-            b.x = Math.round(cx * 100) / 100;
-            b.z = Math.round(cz * 100) / 100;
-            b.yaw = Math.round(cyaw * 100) / 100;
-            legAt = nowMs;
-            b.leg_at = legAt;
-            changed = true;
-          }
+          /* KHÔNG ghi DB ở đây: vị trí giữa chặng suy ra được từ (x,z,leg_at,tx,tz)
+             + tốc độ, nên ghi mỗi nhịp hỏi chỉ tốn hạn mức D1 (2 dòng mỗi lượt đọc)
+             mà không thêm gì. Chỉ ghi khi trạng thái đổi: xong chặng, đổi chặng,
+             đổi lời nói. */
           break;
         }
       }
@@ -1292,14 +1294,18 @@ async function advanceBots(env, nowMs) {
         hermesPos = { x: cx, z: cz, yaw: cyaw, mode: b.mode };
       } else if (b.bot_id === 'zerobot' && hermesPos) {
         const curDist = Math.hypot(cx - hermesPos.x, cz - hermesPos.z);
-        if (curDist < 1.0) {
+        /* Sợi dây dắt: chó luôn ở cạnh robot. Sát quá thì đẩy ra; xa quá (> 8) thì kéo
+           về — chỉ xảy ra sau một quãng dài không ai ngó, khi hai con "đi nốt chặng"
+           lệch nhau. Bình thường thì khoảng cách đã nằm trong 1–6 nên không thấy gì. */
+        if (curDist < 1.0 || curDist > 8) {
+          const radius = curDist > 8 ? 1.6 : 1.25;
           const baseAng = curDist > 0.01 ? Math.atan2(cx - hermesPos.x, cz - hermesPos.z) : (hermesPos.yaw != null ? hermesPos.yaw + Math.PI : Math.random() * Math.PI * 2);
           let pushed = false;
           for (let off = 0; off <= Math.PI; off += 0.2) {
             for (const s of [1, -1]) {
               const ang = baseAng + s * off;
-              const px = hermesPos.x + Math.sin(ang) * 1.25;
-              const pz = hermesPos.z + Math.cos(ang) * 1.25;
+              const px = hermesPos.x + Math.sin(ang) * radius;
+              const pz = hermesPos.z + Math.cos(ang) * radius;
               if (px >= 0.5 && px <= bounds.wx - 0.5 && pz >= 0.5 && pz <= bounds.wz - 0.5) {
                 cx = px;
                 cz = pz;
@@ -1311,8 +1317,8 @@ async function advanceBots(env, nowMs) {
           }
           if (!pushed) {
             const toCenter = Math.atan2(bounds.wx / 2 - hermesPos.x, bounds.wz / 2 - hermesPos.z);
-            cx = Math.max(0.5, Math.min(bounds.wx - 0.5, hermesPos.x + Math.sin(toCenter) * 1.25));
-            cz = Math.max(0.5, Math.min(bounds.wz - 0.5, hermesPos.z + Math.cos(toCenter) * 1.25));
+            cx = Math.max(0.5, Math.min(bounds.wx - 0.5, hermesPos.x + Math.sin(toCenter) * radius));
+            cz = Math.max(0.5, Math.min(bounds.wz - 0.5, hermesPos.z + Math.cos(toCenter) * radius));
           }
           b.x = cx;
           b.z = cz;
