@@ -1225,7 +1225,10 @@ function buildGround(rows) {
 function renderWorld() {
   const members = (WORLD && WORLD.members) || [];
   // luôn chừa tối thiểu 3 hàng: xây tự do mà thế giới chỉ đúng 1 hàng thì hết chỗ
-  const rows = Math.max(3, Math.ceil(Math.max(members.length, 1) / COLS));
+  /* tối thiểu 8 hàng (trước 3) = thế giới 48×64 thay vì 48×24. Mở CHIỀU SÂU
+     chứ không mở chiều ngang: đổi số lô mỗi hàng sẽ khiến lô của mọi người
+     nhảy sang chỗ khác, còn thêm hàng thì lô cũ giữ nguyên. */
+  const rows = Math.max(8, Math.ceil(Math.max(members.length, 1) / COLS));
   buildGround(rows);
 
   blockGroup.clear();

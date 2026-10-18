@@ -486,7 +486,7 @@ async function restoreApp(request, env) {
  */
 async function worldBounds(env) {
   const c = await env.DB.prepare('SELECT COUNT(*) AS c FROM world_members').first();
-  const rows = Math.max(3, Math.ceil(((c ? c.c : 1) || 1) / PLOT_COLS));   // khớp app: tối thiểu 3 hàng
+  const rows = Math.max(8, Math.ceil(((c ? c.c : 1) || 1) / PLOT_COLS));   // khớp app: tối thiểu 8 hàng
   return { wx: PLOT_COLS * PLOT, wz: rows * PLOT };
 }
 
