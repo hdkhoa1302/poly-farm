@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Moi Đi Xin Tiền Ăn Cơm 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/games-hub.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;font-family:'Nunito','Baloo 2',system-ui,sans-serif;background:#241d17;color:#1c2024}
+#stage{position:fixed;inset:0;width:100%;height:100%}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5;padding:calc(10px + env(safe-area-inset-top)) 12px calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;justify-content:space-between}
+.hudrow{display:flex;gap:8px;align-items:center;pointer-events:auto}
+.pill{background:#fffdf5;border:3px solid #1c2024;border-radius:999px;padding:3px 12px;font-weight:800;font-size:16px;box-shadow:0 3px 0 #1c2024;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.pill small{font-size:10px;color:#5f574f;font-weight:800}
+.pill.hp span{color:#e5484d}
+.spacer{flex:1}
+.icon-btn{width:42px;height:42px;border:3px solid #1c2024;border-radius:12px;background:#ffc53d;color:#1c2024;display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 0 #1c2024;padding:0}
+.icon-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #1c2024}
+#comboBox{position:fixed;right:14px;top:72px;background:#ffc53d;border:3px solid #1c2024;border-radius:12px;padding:4px 10px;font-weight:800;font-size:18px;box-shadow:0 3px 0 #1c2024;display:none;pointer-events:none;z-index:5}
+#flashOv{position:fixed;inset:0;background:#e5484d;opacity:0;pointer-events:none;z-index:4;transition:opacity .15s ease-out}
+#popWrap{position:fixed;inset:0;pointer-events:none;z-index:6;overflow:hidden}
+.pop{position:absolute;font-size:24px;font-weight:800;font-family:'Baloo 2',sans-serif;color:#ffc53d;-webkit-text-stroke:1.2px #1c2024;animation:popAnim .8s ease-out forwards;white-space:nowrap}
+@keyframes popAnim{0%{transform:translate(-50%,0) scale(.8);opacity:1}100%{transform:translate(-50%,-65px) scale(1.15);opacity:0}}
+.overlay{position:fixed;inset:0;display:grid;place-items:center;background:rgba(20,22,26,.65);z-index:10;padding:16px;overflow-y:auto}
+.overlay.hidden{display:none}
+.box{width:100%;max-width:400px;background:#fffdf5;border:4px solid #1c2024;border-radius:22px;box-shadow:0 8px 0 #1c2024;padding:18px;text-align:center;pointer-events:auto}
+.title{font-size:26px;font-weight:800;margin:0 0 6px;line-height:1.1}
+.title small{display:block;width:fit-content;margin:0 auto 6px;font-size:11px;color:#fffdf5;background:#c2410c;border:2px solid #1c2024;border-radius:999px;padding:2px 10px}
+.sub{font-size:13.5px;font-weight:700;color:#5f574f;margin:4px 0 10px;line-height:1.4}
+.rule-list{text-align:left;display:grid;gap:6px;margin:8px 0 12px;font-size:13px;font-weight:700}
+.rule-list div{background:#f4f1e6;border:2px solid #1c2024;border-radius:10px;padding:6px 9px;line-height:1.25;display:flex;gap:8px;align-items:center}
+.btn{display:block;width:100%;border:3px solid #1c2024;border-radius:14px;background:#ffc53d;color:#1c2024;font-weight:800;font-size:19px;padding:10px 14px;box-shadow:0 4px 0 #1c2024;cursor:pointer;margin-top:7px}
+.btn:active{transform:translateY(2px);box-shadow:0 2px 0 #1c2024}
+.btn.alt{background:#f4f1e6;font-size:15px;padding:8px 12px}
+.btn.txt{background:transparent;border-color:transparent;box-shadow:none;font-size:14px;color:#3e63dd;text-decoration:underline;margin-top:2px}
+.scoreline{font-size:46px;font-weight:800;line-height:1;margin:4px 0}
+.badge{display:inline-block;background:#46a758;color:#fff;border:2px solid #1c2024;border-radius:999px;padding:3px 12px;font-weight:800;font-size:14px;margin-bottom:6px}
+.badge.grey{background:#8e4ec6}
+#lbSec{margin-top:10px;text-align:left;max-height:160px;overflow-y:auto;border-top:2px dashed #1c2024;padding-top:6px}
+</style>
+</head>
+<body>
+<div id="stage"></div><div id="flashOv"></div><div id="popWrap"></div><div id="comboBox">COMBO x2</div>
+<div id="hud">
+  <div class="hudrow">
+    <div class="pill"><small>TIỀN DONATE</small><span id="hMoney">0k</span></div>
+    <div class="pill"><small>KỶ LỤC</small><span id="hBest">0k</span></div>
+    <div class="pill hp"><small>BỤNG</small><span id="hHp">3</span></div>
+    <div class="pill"><small>CÒN LẠI</small><span id="hTime">60s</span></div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="pauseBtn" aria-label="Tạm dừng"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg></button>
+    <button class="icon-btn" id="muteBtn" aria-label="Tắt tiếng"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path id="muteIcon" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg></button>
+    <button class="icon-btn" id="hubBtn" aria-label="Về Hub" onclick="location.href='../'"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+  </div>
+</div>
+<div class="overlay" id="startOv">
+  <div class="box">
+    <h1 class="title"><small>Zero Bot giới thiệu</small>Moi đi xin tiền ăn cơm</h1>
+    <p class="sub">Hứng tiền anh em donate, xúc cơm ăn cho đầy bụng. Đụng hoá đơn tiền phòng là mất một bữa.</p>
+    <div class="rule-list">
+      <div>Kéo chuột, vuốt màn hình hoặc phím A-D / ← → để Moi chạy ngang</div>
+      <div>Hứng tiền 10k (+1), 50k (+5) để tăng điểm; hứng liên tiếp để nhân combo</div>
+      <div>Ăn tô cơm để hồi 1 bụng; né chổi, muỗi và hoá đơn tiền phòng</div>
+    </div>
+    <button class="btn" id="startBtn">Chơi luôn</button>
+    <button class="btn txt" id="howBtn">Xem luật chơi chi tiết</button>
+    <div class="sub" style="margin-top:8px">Phím Space bắt đầu/chơi lại, P tạm dừng, M tắt tiếng. Mỗi ván 60 giây.</div>
+  </div>
+</div>
+<div class="overlay hidden" id="gameOv">
+  <div class="box">
+    <div class="badge grey" id="endReason">Hết giờ</div>
+    <div class="sub" id="endWhy">Hết 60 giây, anh em hết tiền donate</div>
+    <div class="scoreline" id="endScore">0k</div>
+    <div class="sub">Kỷ lục: <b id="endBest">0k</b></div>
+    <div class="badge" id="endTitle">Bụng Đói</div>
+    <div class="sub" id="endHint"></div>
+    <button class="btn" id="againBtn">Chơi lại</button>
+    <button class="btn alt" id="shareBtn">Khoe điểm vào nhóm</button>
+    <button class="btn alt" id="homeBtn">Về màn đầu</button>
+    <div id="lbSec"></div>
+  </div>
+</div>
+<div class="overlay hidden" id="pauseOv">
+  <div class="box">
+    <h2 class="title">Đang tạm dừng</h2>
+    <p class="sub">Moi đang thở, cơm nguội mất.</p>
+    <button class="btn" id="resumeBtn">Chơi tiếp</button>
+    <button class="btn alt" id="quitBtn">Về màn đầu</button>
+  </div>
+</div>
+<div class="overlay hidden" id="infoOv">
+  <div class="box">
+    <h2 class="title">Luật chơi</h2>
+    <div class="rule-list">
+      <div>Tiền donate: 10k là 1 điểm, 50k là 5 điểm, hứng liên tiếp combo tăng</div>
+      <div>Tô cơm: hồi 1 bụng, tối đa 3 bụng</div>
+      <div>Chổi, muỗi, hoá đơn: mất 1 bụng, hết bụng là đói ngất ván kết thúc</div>
+      <div>Càng về cuối ván rơi càng nhanh, hụt một tờ tiền là mất combo</div>
+    </div>
+    <button class="btn" id="infoClose">Rõ rồi, chơi</button>
+  </div>
+</div>
+<script>
+/* MOI_LOGIC_START */
+(function () {
+  const RULES = {
+    ROUND_SEC: 60, MAX_HP: 3, HP_START: 3,
+    POINTS: { money10: 1, money50: 5 }, HEAL: { rice: 1 },
+    HURTS: ['broom', 'mosquito', 'invoice'], MISS_BREAKS_COMBO: true,
+    SPEED_BASE: 1.0, SPEED_PER_SEC: 0.012, SPEED_MAX: 2.4
+  };
+  const titleFor = s => s >= 300 ? 'TRÙM XIN TIỀN' : (s >= 200 ? 'Đại Gia Ăn Cơm' : (s >= 120 ? 'Có Cơm Có Thịt' : (s >= 70 ? 'Đủ Bát Cơm' : (s >= 30 ? 'Ăn Mì Gói' : 'Bụng Đói'))));
+  const MoiLogic = {
+    RULES: RULES,
+    newGame: function () {
+      return { t: 0, hp: RULES.HP_START, score: 0, combo: 1, over: false, why: '', items: [], spawnT: 0.5, nextId: 1 };
+    },
+    speedAt: function (tSec) {
+      return Math.min(RULES.SPEED_MAX, RULES.SPEED_BASE + Math.max(0, tSec) * RULES.SPEED_PER_SEC);
+    },
+    makeItem: function (kind, opts) {
+      opts = opts || {};
+      return { id: opts.id || ('it_' + Math.random().toString(36).slice(2, 8)), kind: kind, x: opts.x != null ? opts.x : 0, y: opts.y != null ? opts.y : 12, z: opts.z != null ? opts.z : 0, speed: opts.speed != null ? opts.speed : 6.5, r: opts.r != null ? opts.r : 0.8 };
+    },
+    catchItem: function (state, kind) {
+      let pts = 0;
+      if (RULES.POINTS[kind]) {
+        pts = RULES.POINTS[kind] * state.combo;
+        state.score += pts;
+        state.combo += 1;
+      } else if (kind === 'rice') {
+        state.hp = Math.min(RULES.MAX_HP, state.hp + (RULES.HEAL.rice || 1));
+        state.combo += 1;
+      }
+      return { points: pts, combo: state.combo, hp: state.hp };
+    },
+    hurt: function (state, kind) {
+      state.hp = Math.max(0, state.hp - 1);
+      state.combo = 1;
+      if (state.hp <= 0) { state.over = true; state.why = 'hungry'; }
+      return { hp: state.hp, over: state.over };
+    },
+    step: function (state, dt, playerX, rng) {
+      if (state.over) return [];
+      rng = rng || Math.random;
+      playerX = playerX != null ? playerX : 0;
+      const events = [];
+      state.t += dt;
+      if (state.t >= RULES.ROUND_SEC) {
+        state.t = RULES.ROUND_SEC; state.over = true; state.why = 'time';
+        events.push({ type: 'over', why: 'time' });
+        return events;
+      }
+      state.spawnT = (state.spawnT || 0.5) - dt;
+      if (state.spawnT <= 0) {
+        const roll = rng(), x = (rng() * 10) - 5;
+        let kind = 'money10';
+        if (roll < 0.44) kind = 'money10';
+        else if (roll < 0.65) kind = 'money50';
+        else if (roll < 0.77) kind = 'rice';
+        else if (roll < 0.85) kind = 'broom';
+        else if (roll < 0.93) kind = 'mosquito';
+        else kind = 'invoice';
+        state.items.push(this.makeItem(kind, { x: x, y: 12, id: 'it_' + (state.nextId++) }));
+        state.spawnT = Math.max(0.38, 1.05 - (state.t / RULES.ROUND_SEC) * 0.45);
+      }
+      const spd = this.speedAt(state.t), catchY = 1.0, catchR = 1.0;
+      for (let i = state.items.length - 1; i >= 0; i--) {
+        const it = state.items[i];
+        it.y -= (it.speed || 6.5) * spd * dt;
+        if (Math.abs(it.y - catchY) < 0.65 && Math.abs(it.x - playerX) <= (it.r || 0.8) + catchR) {
+          state.items.splice(i, 1);
+          if (RULES.HURTS.indexOf(it.kind) >= 0) {
+            const h = this.hurt(state, it.kind);
+            events.push({ type: 'hurt', kind: it.kind, hp: h.hp, combo: state.combo });
+            if (h.over) { events.push({ type: 'over', why: state.why }); return events; }
+          } else if (it.kind === 'rice') {
+            const heal = this.catchItem(state, it.kind);
+            events.push({ type: 'heal', kind: 'rice', hp: heal.hp, combo: heal.combo });
+          } else {
+            const c = this.catchItem(state, it.kind);
+            events.push({ type: 'catch', kind: it.kind, points: c.points, combo: c.combo, hp: c.hp });
+          }
+          continue;
+        }
+        if (it.y < 0) {
+          state.items.splice(i, 1);
+          if (RULES.POINTS[it.kind]) {
+            if (RULES.MISS_BREAKS_COMBO) state.combo = 1;
+            events.push({ type: 'miss', kind: it.kind, combo: state.combo });
+          }
+        }
+      }
+      return events;
+    },
+    shareText: function (state) {
+      const s = state.score || 0;
+      return 'Tau vừa gom được ' + s + 'k tiền donate cho Moi Đi Xin Tiền Ăn Cơm (' + titleFor(s) + '). Vào hứng thử xem!';
+    }
+  };
+  if (typeof window !== 'undefined') window.MoiLogic = MoiLogic;
+  if (typeof module !== 'undefined') module.exports = MoiLogic;
+})();
+/* MOI_LOGIC_END */
+</script>
+<script type="module">
+import * as THREE from 'three';
+const $ = id => document.getElementById(id);
+const KEY_BEST = 'moi_an_com_best', KEY_MUTE = 'moi_an_com_muted';
+let actx = null, master = null;
+const ac = () => {
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) { actx = new AC(); master = actx.createGain(); master.gain.value = 0.45; master.connect(actx.destination); }
+  }
+  if (actx && actx.state !== 'running') actx.resume().catch(()=>{});
+  return actx;
+};
+let muted = localStorage.getItem(KEY_MUTE) === '1';
+const setMuted = m => {
+  muted = m; localStorage.setItem(KEY_MUTE, m ? '1' : '0');
+  const ic = $('muteIcon');
+  if (ic) ic.setAttribute('d', m ? 'M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z' : 'M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z');
+};
+setMuted(muted);
+const beep = (f, d, type, vol, slide) => {
+  if (muted || !actx || actx.state !== 'running') return;
+  try {
+    const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.18, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.02);
+  } catch(e){}
+};
+const SFX = {
+  pick(c) { beep(580 * Math.pow(1.08, Math.min(12, c)), 0.09, 'sine', 0.18); },
+  rice() { beep(520, 0.1, 'triangle', 0.2); setTimeout(() => beep(780, 0.12, 'triangle', 0.15), 50); },
+  hurt() { beep(160, 0.22, 'square', 0.2, -80); },
+  deny() { beep(280, 0.15, 'triangle', 0.15, -90); },
+  lose() { beep(360, 0.45, 'sawtooth', 0.2, -240); }
+};
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+$('stage').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#7ce2fe'); scene.fog = new THREE.Fog('#bfeeff', 20, 55);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 80);
+camera.position.set(0, 4.2, 8.8); camera.lookAt(0, 1.4, 0);
+
+scene.add(new THREE.HemisphereLight('#ffffff', '#7ca56c', 0.85));
+const sun = new THREE.DirectionalLight('#fff5dd', 1.8);
+sun.position.set(5, 12, 7); scene.add(sun);
+
+const boxG = new THREE.BoxGeometry(1, 1, 1), cylG = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
+const M = (c, flat) => new THREE.MeshLambertMaterial({ color: c, flatShading: !!flat });
+const mkMesh = (g, mat, s, p) => {
+  const m = new THREE.Mesh(g, mat);
+  m.scale.set(s[0], s[1], s[2]); m.position.set(p[0], p[1], p[2]);
+  return m;
+};
+
+const moiGroup = new THREE.Group();
+scene.add(moiGroup);
+const bodyMesh = mkMesh(boxG, M('#f76b15'), [0.85, 0.9, 0.55], [0, 0.95, 0]);
+const headMesh = mkMesh(boxG, M('#f6c99a'), [0.65, 0.65, 0.6], [0, 1.7, 0]);
+const hairMesh = mkMesh(boxG, M('#2b2b38'), [0.69, 0.32, 0.65], [0, 1.95, 0]);
+const eyeL = mkMesh(boxG, M('#1c2024'), [0.09, 0.09, 0.05], [-0.18, 1.72, 0.31]);
+const eyeR = mkMesh(boxG, M('#1c2024'), [0.09, 0.09, 0.05], [0.18, 1.72, 0.31]);
+const legL = mkMesh(boxG, M('#3e63dd'), [0.28, 0.5, 0.3], [-0.22, 0.25, 0]);
+const legR = mkMesh(boxG, M('#3e63dd'), [0.28, 0.5, 0.3], [0.22, 0.25, 0]);
+const armL = mkMesh(boxG, M('#f6c99a'), [0.18, 0.45, 0.2], [-0.48, 0.9, 0.2]);
+const armR = mkMesh(boxG, M('#f6c99a'), [0.18, 0.45, 0.2], [0.48, 0.9, 0.2]);
+armL.rotation.x = -0.5; armR.rotation.x = -0.5;
+const bowlMesh = mkMesh(cylG, M('#fffdf5'), [0.85, 0.32, 0.85], [0, 0.92, 0.52]);
+moiGroup.add(bodyMesh, headMesh, hairMesh, eyeL, eyeR, legL, legR, armL, armR, bowlMesh);
+
+scene.add(mkMesh(boxG, M('#dcd1b4'), [26, 0.4, 5], [0, -0.2, 0]));
+scene.add(mkMesh(boxG, M('#a89f88'), [26, 0.15, 0.3], [0, 0.05, -1.8]));
+const houseCols = ['#f4d06f', '#95b8d1', '#eac4d5', '#d8e2dc', '#ffe5d9', '#b8c0ff'];
+for (let i = -4; i <= 4; i++) {
+  const h = 4 + Math.sin(i * 3.7) * 2;
+  scene.add(mkMesh(boxG, M(houseCols[(i + 10) % houseCols.length]), [2.6, h, 2.5], [i * 2.8, h / 2 - 0.2, -4.5]));
+}
+for (let i = -3; i <= 3; i += 2) {
+  scene.add(mkMesh(cylG, M('#8b5a2b'), [0.25, 1.2, 0.25], [i * 3.8 + 1.2, 0.6, -2.5]));
+  const foliage = mkMesh(boxG, M('#46a758'), [1.1, 1.1, 1.1], [i * 3.8 + 1.2, 1.5, -2.5]);
+  foliage.rotation.y = 0.4; scene.add(foliage);
+}
+
+const itemMeshes = new Map();
+function createItemMesh(kind) {
+  const g = new THREE.Group();
+  if (kind === 'money10' || kind === 'money50') {
+    const c = kind === 'money10' ? '#ffe066' : '#ff922b';
+    g.add(mkMesh(boxG, M(c), [kind === 'money10' ? 0.95 : 1.15, 0.08, 0.6], [0, 0, 0]));
+    g.add(mkMesh(cylG, M('#fffdf5'), [0.28, 0.09, 0.28], [0, 0, 0]));
+  } else if (kind === 'rice') {
+    g.add(mkMesh(cylG, M('#fffdf5'), [0.75, 0.3, 0.75], [0, -0.05, 0]));
+    g.add(mkMesh(cylG, M('#f4f1e6'), [0.65, 0.25, 0.65], [0, 0.08, 0]));
+    g.add(mkMesh(boxG, M('#46a758'), [0.15, 0.08, 0.15], [0.08, 0.22, 0]));
+  } else if (kind === 'broom') {
+    g.add(mkMesh(cylG, M('#a87b3f'), [0.08, 1.2, 0.08], [0, 0.35, 0]));
+    g.add(mkMesh(boxG, M('#ffc53d'), [0.45, 0.5, 0.2], [0, -0.3, 0]));
+    g.rotation.z = 0.3;
+  } else if (kind === 'mosquito') {
+    g.add(mkMesh(boxG, M('#2b2b38'), [0.35, 0.2, 0.45], [0, 0, 0]));
+    g.add(mkMesh(boxG, M('#e8f4f8'), [0.4, 0.04, 0.25], [-0.25, 0.1, 0]));
+    g.add(mkMesh(boxG, M('#e8f4f8'), [0.4, 0.04, 0.25], [0.25, 0.1, 0]));
+  } else {
+    g.add(mkMesh(boxG, M('#ffffff'), [0.7, 0.06, 0.95], [0, 0, 0]));
+    g.add(mkMesh(boxG, M('#e5484d'), [0.5, 0.08, 0.1], [0, 0, -0.2]));
+    g.add(mkMesh(boxG, M('#e5484d'), [0.5, 0.08, 0.1], [0, 0, 0.1]));
+  }
+  scene.add(g);
+  return g;
+}
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const popWrap = $('popWrap');
+function showPopup(text, x, color) {
+  const el = document.createElement('div');
+  el.className = 'pop'; el.textContent = text;
+  if (color) el.style.color = color;
+  const scrX = ((x + 5.5) / 11) * innerWidth;
+  el.style.left = clamp(scrX, 40, innerWidth - 40) + 'px';
+  el.style.top = (innerHeight * 0.65) + 'px';
+  popWrap.appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+
+let best = Number(localStorage.getItem(KEY_BEST) || 0);
+let state = window.MoiLogic.newGame();
+let mode = 'start', trauma = 0, flashT = 0, targetX = 0, playerX = 0, walkT = 0;
+const GH = window.GamesHub || null;
+const ghLb = GH ? GH.leaderboard('moi-an-com-3d') : null;
+
+function updateHUD() {
+  $('hMoney').textContent = state.score + 'k';
+  $('hBest').textContent = best + 'k';
+  $('hHp').textContent = state.hp;
+  $('hTime').textContent = Math.max(0, Math.ceil(window.MoiLogic.RULES.ROUND_SEC - state.t)) + 's';
+  const cBox = $('comboBox');
+  if (state.combo > 1) { cBox.style.display = 'block'; cBox.textContent = 'COMBO x' + state.combo; }
+  else { cBox.style.display = 'none'; }
+}
+
+function startPlay() {
+  ac();
+  state = window.MoiLogic.newGame();
+  targetX = 0; playerX = 0; moiGroup.position.x = 0;
+  for (const [, m] of itemMeshes) scene.remove(m);
+  itemMeshes.clear();
+  mode = 'playing';
+  $('startOv').classList.add('hidden'); $('gameOv').classList.add('hidden');
+  $('pauseOv').classList.add('hidden'); $('infoOv').classList.add('hidden');
+  updateHUD();
+}
+
+function onGameOver() {
+  mode = 'gameover';
+  if (state.score > best) { best = state.score; localStorage.setItem(KEY_BEST, String(best)); }
+  if (ghLb) ghLb.submit(state.score).catch(()=>{});
+  $('endReason').textContent = state.why === 'hungry' ? 'Bụng đói' : 'Hết giờ';
+  $('endWhy').textContent = state.why === 'hungry' ? 'Hết bụng là hết ván, Moi đói ngất' : 'Hết 60 giây, anh em hết tiền donate';
+  $('endScore').textContent = state.score + 'k';
+  $('endBest').textContent = best + 'k';
+  $('endTitle').textContent = state.score >= 300 ? 'TRÙM XIN TIỀN' : (state.score >= 200 ? 'Đại Gia Ăn Cơm' : (state.score >= 120 ? 'Có Cơm Có Thịt' : (state.score >= 70 ? 'Đủ Bát Cơm' : (state.score >= 30 ? 'Ăn Mì Gói' : 'Bụng Đói'))));
+  $('endHint').textContent = 'Chơi lại để gom thêm tiền donate nhé!';
+  if (GH && GH.renderLeaderboard) GH.renderLeaderboard($('lbSec'), 'moi-an-com-3d', { limit: 10 });
+  $('gameOv').classList.remove('hidden');
+}
+
+let lastT = performance.now();
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if (mode === 'playing') {
+    playerX += (targetX - playerX) * Math.min(1, dt * 14);
+    playerX = clamp(playerX, -5.2, 5.2);
+    moiGroup.position.x = playerX;
+    moiGroup.rotation.z = -(targetX - playerX) * 0.08;
+    walkT += dt * Math.abs(targetX - playerX) * 16;
+    legL.rotation.x = Math.sin(walkT) * 0.45; legR.rotation.x = -Math.sin(walkT) * 0.45;
+    const events = window.MoiLogic.step(state, dt, playerX);
+    for (const ev of events) {
+      if (ev.type === 'catch') { SFX.pick(ev.combo); showPopup('+' + ev.points + 'k', playerX, '#ffe066'); }
+      else if (ev.type === 'heal') { SFX.rice(); showPopup('CƠM! +1 BỤNG', playerX, '#46a758'); }
+      else if (ev.type === 'hurt') { SFX.hurt(); trauma = 0.55; flashT = 0.16; showPopup('-1 BỤNG!', playerX, '#e5484d'); }
+      else if (ev.type === 'miss') { SFX.deny(); showPopup('RƠI MẤT!', playerX, '#ff6b6b'); }
+      else if (ev.type === 'over') { SFX.lose(); onGameOver(); }
+    }
+    updateHUD();
+    const curIds = new Set();
+    for (const it of state.items) {
+      curIds.add(it.id);
+      let m = itemMeshes.get(it.id);
+      if (!m) { m = createItemMesh(it.kind); itemMeshes.set(it.id, m); }
+      m.position.set(it.x, it.y, it.z || 0); m.rotation.y += dt * 2.2;
+    }
+    for (const [id, m] of itemMeshes) {
+      if (!curIds.has(id)) { scene.remove(m); itemMeshes.delete(id); }
+    }
+  }
+  if (trauma > 0) {
+    trauma = Math.max(0, trauma - dt * 1.8);
+    camera.position.set(moiGroup.position.x * 0.4 + (Math.random() - 0.5) * trauma * 0.5, 4.2 + (Math.random() - 0.5) * trauma * 0.4, 8.8);
+  } else {
+    camera.position.x += (moiGroup.position.x * 0.4 - camera.position.x) * Math.min(1, dt * 8);
+  }
+  camera.lookAt(camera.position.x, 1.4, 0);
+  if (flashT > 0) {
+    flashT = Math.max(0, flashT - dt);
+    $('flashOv').style.opacity = String(Math.min(0.4, flashT * 2.5));
+  }
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+window.addEventListener('pointerdown', e => { ac(); if (mode === 'playing') targetX = ((e.clientX / innerWidth) - 0.5) * 11; });
+window.addEventListener('pointermove', e => { if (mode === 'playing' && e.buttons > 0) targetX = ((e.clientX / innerWidth) - 0.5) * 11; });
+window.addEventListener('keydown', e => {
+  ac();
+  if ([' ', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') targetX = clamp(targetX - 1.2, -5.2, 5.2);
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') targetX = clamp(targetX + 1.2, -5.2, 5.2);
+  if (e.key === ' ') {
+    if (mode === 'start' || mode === 'gameover') startPlay();
+    else if (mode === 'paused') { mode = 'playing'; $('pauseOv').classList.add('hidden'); }
+    else if (mode === 'playing') { mode = 'paused'; $('pauseOv').classList.remove('hidden'); }
+  }
+  if (e.key === 'p' || e.key === 'P') {
+    if (mode === 'playing') { mode = 'paused'; $('pauseOv').classList.remove('hidden'); }
+    else if (mode === 'paused') { mode = 'playing'; $('pauseOv').classList.add('hidden'); }
+  }
+  if (e.key === 'm' || e.key === 'M') setMuted(!muted);
+});
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+$('startBtn').onclick = startPlay; $('againBtn').onclick = startPlay;
+$('howBtn').onclick = () => $('infoOv').classList.remove('hidden');
+$('infoClose').onclick = () => { $('infoOv').classList.add('hidden'); startPlay(); };
+$('resumeBtn').onclick = () => { mode = 'playing'; $('pauseOv').classList.add('hidden'); };
+$('quitBtn').onclick = () => { mode = 'start'; $('pauseOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
+$('homeBtn').onclick = () => { mode = 'start'; $('gameOv').classList.add('hidden'); $('startOv').classList.remove('hidden'); };
+$('pauseBtn').onclick = () => {
+  if (mode === 'playing') { mode = 'paused'; $('pauseOv').classList.remove('hidden'); }
+  else if (mode === 'paused') { mode = 'playing'; $('pauseOv').classList.add('hidden'); }
+};
+$('muteBtn').onclick = () => setMuted(!muted);
+$('shareBtn').onclick = async () => {
+  const text = window.MoiLogic.shareText(state);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.openTelegramLink) {
+    try { tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(location.href) + '&text=' + encodeURIComponent(text)); return; } catch(e){}
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title: document.title, text: text, url: location.href }); return; } catch(e){}
+  }
+  try {
+    await navigator.clipboard.writeText(text + ' ' + location.href);
+    $('endHint').textContent = 'Đã chép câu khoe rồi, dán vào nhóm nhé!';
+  } catch(e) {
+    $('endHint').textContent = 'Không chép được, bạn tự gõ điểm vào nhóm nhé.';
+  }
+};
+
+if (location.search.includes('debug=1')) {
+  window.__moi = {
+    // getter để hook luôn trỏ vào ván ĐANG chơi: bấm "Chơi lại" là state được tạo mới,
+    // chép thẳng giá trị vào đây thì hook đọc phải ván cũ (đã dính lỗi này khi chơi thử).
+    get state() { return state; },
+    get items() { return state.items; },
+    get mode() { return mode; },
+    step: (dt, px, rng) => window.MoiLogic.step(state, dt != null ? dt : 0.016, px != null ? px : moiGroup.position.x, rng),
+    spawnAt: (kind, x) => {
+      const it = window.MoiLogic.makeItem(kind, { x: x, y: 12, id: 'dbg_' + (state.nextId++) });
+      state.items.push(it);
+      const m = createItemMesh(it.kind);
+      m.position.set(it.x, it.y, it.z || 0);
+      itemMeshes.set(it.id, m);
+      return it;
+    },
+    scene: scene, player: moiGroup, renderer: renderer, camera: camera
+  };
+}
+</script>
+</body>
+</html>
