@@ -807,7 +807,9 @@ class Walker {
       const b = document.getElementById('walkBtn');
       if (b) b.classList.remove('on');
     }
-    if (!this.auto || (maker && !maker.hidden)) { this.way = null; return false; }
+    /* bảng tạo nhân vật đang mở thì đứng im (bảng này bật/tắt bằng class .on,
+       KHÔNG phải thuộc tính hidden — kiểm tra nhầm là đi dạo chết ngay từ đầu) */
+    if (!this.auto || (maker && maker.classList.contains('on'))) { this.way = null; return false; }
 
     if (this.mode === 'walk') {
       player.moving = true; player.sprint = false;
