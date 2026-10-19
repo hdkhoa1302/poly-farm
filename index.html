@@ -802,7 +802,12 @@ async function openApp(app) {
           || new URLSearchParams(location.search).get('startapp');
   if (!sp) return;
   const app = orderedApps().find(a => a.id === sp);   // bỏ qua app đã bị xoá
-  if (app) setTimeout(() => openApp(app), 300);
+  if (!app) return;
+  /* Mỗi phiên webview chỉ nhảy vào app 1 lần: về Hub bằng nút Back thì phải
+     đứng yên, không nhảy lại app nữa bỏ thành vòng lặp. */
+  const key = 'hub.start.' + app.id;
+  try { if (sessionStorage.getItem(key) === '1') return; sessionStorage.setItem(key, '1'); } catch (e) {}
+  setTimeout(() => openApp(app), 300);
 })();
 
 /* ---------------- status ---------------- */

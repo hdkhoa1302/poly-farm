@@ -237,6 +237,13 @@ const $    = id => document.getElementById(id);
 
 if (inTg) {
   tg.ready(); tg.expand();
+  /* Nút back của Telegram hiển thị trên đầu app; bấm về trang trước (Hub). */
+  try {
+    tg.BackButton && tg.BackButton.show();
+    tg.onEvent('backButtonClicked', () => {
+      try { window.history.length > 1 ? window.history.back() : tg.close(); } catch (e) {}
+    });
+  } catch (e) {}
   if (tg.onEvent) tg.onEvent('themeChanged', () => {
     document.documentElement.setAttribute('data-theme', tg.colorScheme === 'light' ? 'light' : 'dark');
   });

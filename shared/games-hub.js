@@ -28,6 +28,21 @@
     return (t && t.platform && t.platform !== 'unknown' && t.initData) || '';
   }
 
+  /** Nút back của Telegram: bấm thì nhảy về trang trước (thường là Hub).
+      Chỉ bật khi có lịch sử để vàng không thì Telegram tự xử lý đóng app. */
+  function _hubBackWired() {
+    var t = tg();
+    if (!t || !t.platform || t.platform === 'unknown' || !t.BackButton) return;
+    try {
+      if (!history || history.length <= 1) return;
+      t.BackButton.show();
+      t.BackButton.onClick(function () {
+        try { if (history.length > 1) history.back(); else t.close(); }
+        catch (e) { try { t.close(); } catch (e2) {} }
+      });
+    } catch (e) {}
+  }
+
   // ================= Danh tính người chơi =================
   function player() {
     var t = tg();
@@ -197,6 +212,7 @@
     chat: chat,
     initData: initData,
     leaderboard: leaderboard,
+    wireBackButton: _hubBackWired,
     renderLeaderboard: function (el, appId, opts) {
       injectStyles();
       renderLeaderboard(el, appId, opts);
