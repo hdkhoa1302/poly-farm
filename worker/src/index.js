@@ -35,6 +35,11 @@
  *   GET  /world/live             -> BẢN NHẸ: vị trí mọi người + số hiệu khối,
  *                                   để app hỏi mỗi ~1 giây (realtime)
  *   GET  /world/bots             -> vị trí THẬT của Hermes & ZeroBot (công khai)
+ *   GET  /fish/live              -> cả cái ao chung (công khai: ai cũng xem được)
+ *   POST /fish/join              (body initData)         -> ghi danh, tặng 1 cá con lần đầu
+ *   POST /fish/feed              (body initData, fishId) -> cho ăn (được cho cá người khác ăn)
+ *   POST /fish/collect           (body initData)         -> thu coin cho cá của mình
+ *   POST /fish/buy               (body initData, kind, name) -> mua cá mới, gắn tên mình
  *
  * "Lấy ngay" không thể chạy ngay tại Worker: nguồn log nằm ở máy (state.db),
  * nên Worker chỉ GHI YÊU CẦU vào hàng đợi; cron ở máy nhặt rồi chạy.
@@ -124,6 +129,12 @@ async function route(request, url, env) {
   if (p === '/world/move' && request.method === 'POST') return worldMove(request, env);
   if (p === '/world/look' && request.method === 'POST') return worldLook(request, env);
   if (p === '/bots/state' && request.method === 'POST') return updateBotsState(request, env);
+
+  if (p === '/fish/live' && request.method === 'GET') return fishLive(env);
+  if (p === '/fish/join' && request.method === 'POST') return fishJoin(request, env);
+  if (p === '/fish/feed' && request.method === 'POST') return fishFeed(request, env);
+  if (p === '/fish/collect' && request.method === 'POST') return fishCollect(request, env);
+  if (p === '/fish/buy' && request.method === 'POST') return fishBuy(request, env);
 
   if (p === '/digests') return listDigests(request, url, env);
 
@@ -1474,4 +1485,240 @@ async function advanceBots(env, nowMs) {
   } catch {
     return [];
   }
+}
+
+/* =============================================================== ao cá */
+/*
+ * Ao Cá Của Ae — một ao CHUNG cho cả nhóm (kiểu Insaniquarium phần nuôi tự do).
+ * Nguyên tắc giữ cho rẻ:
+ *   • Kích thước cá suy ra từ số lần ăn — không lưu `size`.
+ *   • Coin đẻ ra suy ra từ (now - last_pay) — chỉ GHI khi có người thu tiền.
+ *   • Vị trí cá do trình duyệt tự tính từ (id, thời gian); máy chủ không biết.
+ *   • Ai cũng cho ăn được cá của người khác; người cho ăn được tính công (`keepers.fed`).
+ */
+const FISH_KINDS = { guppy: 60, gold: 120, angel: 240 };
+const FISH_MAX_SIZE = 3;          // kích thước tối đa
+const FISH_SIZE_MIN = 1;          // cá mới nở
+const FISH_FEED_GROW = 0.12;      // mỗi lần ăn lớn thêm
+const FISH_PAY_PER_MIN = 6;       // coin/phút cho mỗi 1.0 kích thước (cá size 3 ≈ 18 coin/phút)
+const FISH_ACCRUE_CAP = 7200;     // giây: quá 2 tiếng thì thôi, không tích nữa
+const FISH_FEED_GAP = 900;        // ms: giãn cách tối thiểu giữa 2 lần cho 1 con ăn
+const FISH_MAX_TANK = 40;         // trần số cá trong ao
+const FISH_MAX_OWNED = 8;         // trần số cá một người được sở hữu
+const FISH_NAME_MAX = 12;         // ký tự tên cá
+
+/** Kích thước cá theo số lần ăn. */
+function fishSize(fed) {
+  return Math.min(FISH_MAX_SIZE, FISH_SIZE_MIN + (Number(fed) || 0) * FISH_FEED_GROW);
+}
+
+/** Coin đang chờ thu của một con cá, tính từ last_pay tới nowMs. */
+function fishPay(f, nowMs) {
+  const last = f.last_pay || f.born_at || nowMs;
+  const sec = Math.min(FISH_ACCRUE_CAP, Math.max(0, (nowMs - last) / 1000));
+  return Math.floor((sec * fishSize(f.fed) * FISH_PAY_PER_MIN) / 60);
+}
+
+function fishRow(f, nowMs) {
+  return {
+    id: f.id, ownerId: f.owner_id, owner: f.owner, kind: f.kind, name: f.name,
+    size: Math.round(fishSize(f.fed) * 100) / 100, fed: f.fed,
+    bornAt: f.born_at, lastPay: f.last_pay, pay: fishPay(f, nowMs),
+  };
+}
+
+function keeperRow(k) {
+  return {
+    id: k.user_id, name: k.name, coins: k.coins, earned: k.earned,
+    fed: k.fed, fishes: k.fishes, seen: k.seen,
+  };
+}
+
+/** Tên hiển thị của một người — chỉ lấy từ initData đã xác minh chữ ký. */
+function fishNameOf(u) {
+  const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+  return (full || u.username || ('Ai đó ' + u.id)).slice(0, 40);
+}
+
+/** Đọc cả ao: cá đang sống + ví của mọi người. */
+async function fishAo(env) {
+  const nowMs = Date.now();
+  const f = await env.DB.prepare('SELECT * FROM fish WHERE alive = 1 ORDER BY id').all();
+  const k = await env.DB.prepare('SELECT * FROM keepers ORDER BY earned DESC, coins DESC').all();
+  return { nowMs, fish: f.results || [], keepers: k.results || [] };
+}
+
+/** Số hiệu thay đổi: app so để biết có cá mới hoặc vừa có người cho ăn. */
+async function fishRev(env) {
+  const r = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM fish WHERE alive = 1) AS c,
+            (SELECT COALESCE(MAX(fed_at), 0) FROM fish) AS m`).first();
+  return (r ? r.m : 0) * 1000 + ((r ? r.c : 0) % 1000);
+}
+
+/** Tạo bản ghi ví nếu chưa có (người mới mở app). */
+async function ensureKeeper(env, u, nowMs) {
+  await env.DB.prepare(
+    `INSERT INTO keepers (user_id, name, coins, earned, fed, fishes, granted, seen)
+     VALUES (?, ?, 0, 0, 0, 0, 0, ?)
+     ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, seen = excluded.seen`
+  ).bind(u.id, fishNameOf(u), nowMs).run();
+  return env.DB.prepare('SELECT * FROM keepers WHERE user_id = ?').bind(u.id).first();
+}
+
+/** Thả một con cá vào ao. Trả { id } hoặc { err }. */
+async function fishAdd(env, uid, owner, kind, name, nowMs, free) {
+  const tank = await env.DB.prepare('SELECT COUNT(*) AS c FROM fish WHERE alive = 1').first();
+  if ((tank ? tank.c : 0) >= FISH_MAX_TANK) return { err: 'tank-full' };
+
+  const mine = await env.DB.prepare(
+    'SELECT COUNT(*) AS c FROM fish WHERE alive = 1 AND owner_id = ?').bind(uid).first();
+  if ((mine ? mine.c : 0) >= FISH_MAX_OWNED) return { err: 'owned-full' };
+
+  const nm = String(name || '').trim().slice(0, FISH_NAME_MAX) || owner.slice(0, FISH_NAME_MAX);
+  const r = await env.DB.prepare(
+    `INSERT INTO fish (owner_id, owner, kind, name, fed, born_at, fed_at, last_pay, alive)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, 1)`
+  ).bind(uid, owner, kind, nm, nowMs, nowMs, nowMs).run();
+
+  await env.DB.prepare('UPDATE keepers SET fishes = fishes + 1 WHERE user_id = ?').bind(uid).run();
+  if (free) {
+    await env.DB.prepare('UPDATE keepers SET granted = 1 WHERE user_id = ?').bind(uid).run();
+  }
+  return { id: (r.meta && r.meta.last_row_id) || 0 };
+}
+
+/** GET /fish/live — công khai: ai mở cũng xem được ao. */
+async function fishLive(env) {
+  const a = await fishAo(env);
+  return json({
+    ok: true,
+    now: Math.floor(a.nowMs / 1000),
+    rev: await fishRev(env),
+    fish: a.fish.map((f) => fishRow(f, a.nowMs)),
+    keepers: a.keepers.map(keeperRow),
+  });
+}
+
+/** POST /fish/join — ghi danh; người mới được TẶNG 1 con cá con (một lần). */
+async function fishJoin(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return json({ error: 'bad-signature' }, 403);
+
+  const nowMs = Date.now();
+  let k = await ensureKeeper(env, v.user, nowMs);
+
+  let granted = false;
+  if (k && !k.granted) {
+    const add = await fishAdd(env, v.user.id, fishNameOf(v.user), 'guppy', 'Cá con', nowMs, true);
+    if (add.id) {
+      granted = true;
+      k = await env.DB.prepare('SELECT * FROM keepers WHERE user_id = ?').bind(v.user.id).first();
+    }
+  }
+
+  const a = await fishAo(env);
+  return json({
+    ok: true, granted, you: keeperRow(k),
+    fish: a.fish.map((f) => fishRow(f, a.nowMs)),
+    keepers: a.keepers.map(keeperRow),
+  });
+}
+
+/** Đọc initData cho các lệnh ghi trong ao. */
+async function fishAuth(request, env) {
+  let b;
+  try { b = await request.json(); } catch { return { err: json({ error: 'bad json' }, 400) }; }
+  const v = await verifyInitData(String(b.initData || ''), env.TELEGRAM_BOT_TOKEN);
+  if (!v || v.expired || !v.user) return { err: json({ error: 'bad-signature' }, 403) };
+  return { b, u: v.user };
+}
+
+/** POST /fish/feed — thả thức ăn cho một con cá (cho cá người khác ăn cũng được). */
+async function fishFeed(request, env) {
+  const a = await fishAuth(request, env);
+  if (a.err) return a.err;
+
+  const nowMs = Date.now();
+  const f = await env.DB.prepare('SELECT * FROM fish WHERE id = ? AND alive = 1')
+    .bind(Number(a.b.fishId) || 0).first();
+  if (!f) return json({ ok: false, why: 'no-fish' });
+  if (nowMs - (f.fed_at || 0) < FISH_FEED_GAP) return json({ ok: false, why: 'too-fast' });
+
+  await env.DB.prepare('UPDATE fish SET fed = fed + 1, fed_at = ? WHERE id = ?')
+    .bind(nowMs, f.id).run();
+  await ensureKeeper(env, a.u, nowMs);
+  await env.DB.prepare('UPDATE keepers SET fed = fed + 1 WHERE user_id = ?').bind(a.u.id).run();
+
+  const mine = await env.DB.prepare('SELECT fed FROM keepers WHERE user_id = ?')
+    .bind(a.u.id).first();
+  return json({
+    ok: true, fishId: f.id, fed: f.fed + 1,
+    size: Math.round(fishSize(f.fed + 1) * 100) / 100,
+    yourFed: mine ? mine.fed : 0,
+  });
+}
+
+/** POST /fish/collect — thu coin cho tất cả cá của mình. */
+async function fishCollect(request, env) {
+  const a = await fishAuth(request, env);
+  if (a.err) return a.err;
+
+  const nowMs = Date.now();
+  await ensureKeeper(env, a.u, nowMs);
+
+  const mine = await env.DB.prepare('SELECT * FROM fish WHERE alive = 1 AND owner_id = ?')
+    .bind(a.u.id).all();
+
+  let sum = 0;
+  const stmts = [];
+  for (const f of mine.results || []) {
+    const pay = fishPay(f, nowMs);
+    if (pay > 0) {
+      sum += pay;
+      stmts.push(env.DB.prepare('UPDATE fish SET last_pay = ? WHERE id = ?').bind(nowMs, f.id));
+    }
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  if (sum > 0) {
+    await env.DB.prepare(
+      'UPDATE keepers SET coins = coins + ?, earned = earned + ? WHERE user_id = ?'
+    ).bind(sum, sum, a.u.id).run();
+  }
+
+  const ao = await fishAo(env);
+  const me = ao.keepers.find((x) => String(x.user_id) === String(a.u.id));
+  return json({
+    ok: true, collected: sum, coins: me ? me.coins : 0,
+    fish: ao.fish.map((f) => fishRow(f, ao.nowMs)),
+  });
+}
+
+/** POST /fish/buy — mua cá mới; cá mang tên chủ. */
+async function fishBuy(request, env) {
+  const a = await fishAuth(request, env);
+  if (a.err) return a.err;
+
+  const kind = String(a.b.kind || '');
+  if (!Object.prototype.hasOwnProperty.call(FISH_KINDS, kind)) {
+    return json({ ok: false, why: 'bad-kind' });
+  }
+  const price = FISH_KINDS[kind];
+
+  const nowMs = Date.now();
+  let k = await ensureKeeper(env, a.u, nowMs);
+  if (!k || k.coins < price) return json({ ok: false, why: 'poor' });
+
+  const add = await fishAdd(env, a.u.id, fishNameOf(a.u), kind, String(a.b.name || ''), nowMs, false);
+  if (add.err) return json({ ok: false, why: add.err });
+
+  await env.DB.prepare('UPDATE keepers SET coins = coins - ? WHERE user_id = ?')
+    .bind(price, a.u.id).run();
+
+  const f = await env.DB.prepare('SELECT * FROM fish WHERE id = ?').bind(add.id).first();
+  const after = await env.DB.prepare('SELECT coins FROM keepers WHERE user_id = ?')
+    .bind(a.u.id).first();
+  return json({ ok: true, fish: fishRow(f, nowMs), coins: after ? after.coins : 0 });
 }

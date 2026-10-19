@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ao Cá Của Ae</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="../shared/games-hub.js"></script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#031b2b;font-family:system-ui,-apple-system,sans-serif;user-select:none;-webkit-user-select:none}
+#app{position:relative;width:100vw;height:100vh;max-width:calc(100vh * 9 / 16);margin:0 auto;overflow:hidden;background:#04283f}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#guest-bar{position:absolute;top:calc(env(safe-area-inset-top,8px) + 48px);left:50%;transform:translateX(-50%);background:rgba(220,38,38,.88);color:#fff;font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;z-index:25;pointer-events:none;white-space:nowrap}
+#guest-bar.hidden,.modal.hidden{display:none}
+#hud-top{position:absolute;top:calc(env(safe-area-inset-top,8px) + 8px);left:8px;right:8px;display:flex;gap:5px;align-items:center;z-index:20;pointer-events:none}
+.pill{display:flex;align-items:center;gap:4px;background:rgba(8,24,38,.75);backdrop-filter:blur(6px);color:#f8fafc;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.15)} .pill svg{flex-shrink:0}
+.icon-btn{pointer-events:auto;background:rgba(8,24,38,.75);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;margin-left:auto}
+.icon-btn:active,.act-btn:active{transform:scale(.94)}
+#hud-bot{position:absolute;bottom:calc(env(safe-area-inset-bottom,8px) + 10px);left:10px;right:10px;display:flex;gap:7px;z-index:20}
+.act-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:rgba(8,24,38,.8);backdrop-filter:blur(8px);color:#f8fafc;border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;position:relative}
+.badge{position:absolute;top:-5px;right:4px;background:#eab308;color:#0f172a;border-radius:999px;padding:2px 6px;font-size:10px;font-weight:800;display:none} .badge.show{display:inline-block}
+#toast{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,.92);color:#f8fafc;padding:9px 18px;border-radius:12px;font-size:13px;font-weight:700;pointer-events:none;opacity:0;transition:opacity .2s;z-index:100;border:1px solid rgba(255,255,255,.2);text-align:center}
+#toast.show{opacity:1}
+.modal{position:absolute;inset:0;background:rgba(3,15,24,.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+.modal-card{background:#0b1d2c;border:1px solid rgba(255,255,255,.2);border-radius:18px;width:100%;max-width:330px;color:#f8fafc;padding:16px;max-height:82vh;display:flex;flex-direction:column;gap:12px}
+.modal-head{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:16px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:10px}
+.modal-close{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1;padding:0}
+.buy-kinds{display:flex;flex-direction:column;gap:8px}
+.kind-card{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.12);cursor:pointer;font-size:13px}
+.kind-card.active{border-color:#38bdf8;background:rgba(56,189,248,.16)}
+.kind-card b{display:block;font-size:13px;color:#f8fafc}
+.kind-card span{font-size:12px;color:#eab308;font-weight:700}
+#buy-name{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:9px 12px;color:#fff;font-size:13px;outline:none}
+.btn-main{background:#0284c7;color:#fff;border:none;border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer}
+.btn-main:active{transform:scale(.97)}
+.member-list{overflow-y:auto;display:flex;flex-direction:column;gap:7px;max-height:280px;padding-right:2px}
+.member-item{display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 10px;background:rgba(255,255,255,.06);border-radius:10px}
+.member-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.member-name{flex:1;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.member-stat{font-size:11px;color:#cbd5e1;text-align:right}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="tank"></canvas>
+  <div id="guest-bar" class="hidden">Mở trong Telegram để cùng nuôi</div>
+  <div id="hud-top">
+    <div class="pill"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#eab308" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"/></svg><span id="hud-coins">0</span></div>
+    <div class="pill"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M18 12c-4 4-10 4-14 0 4-4 10-4 14 0z"/><path d="M18 12l4-3v6z"/><circle cx="8" cy="11" r="1" fill="#38bdf8"/></svg><span id="hud-fishes">0/8</span></div>
+    <div class="pill"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#4ade80" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="7" cy="14" r="2"/><circle cx="17" cy="14" r="2"/></svg><span id="hud-fed">0</span></div>
+    <div class="pill"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M2 12c3-2 6-2 9 0s6 2 9 0 3-2 4 0"/><path d="M2 17c3-2 6-2 9 0s6 2 9 0 3-2 4 0"/></svg><span id="hud-tank">0/40</span></div>
+    <button class="icon-btn" onclick="location.href='../'" aria-label="Về Hub"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M15 21v-7a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v7"/></svg></button>
+  </div>
+  <div id="hud-bot">
+    <button class="act-btn" id="btn-collect"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3"/><path d="M7 6V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg><span>Thu tiền</span><span id="badge-pay" class="badge">0</span></button>
+    <button class="act-btn" id="btn-buy"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Mua cá</span></button>
+    <button class="act-btn" id="btn-members"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Thành viên</span></button>
+    <button class="act-btn" id="btn-lb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2"/><path d="M18 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H8v4h8v-4h-1c-.55 0-1-.45-1-1v-2.34"/><path d="M18 3H6v7a6 6 0 0 0 12 0V3z"/></svg><span>Xếp hạng</span></button>
+  </div>
+  <div id="toast"></div>
+  <div class="modal hidden" id="modal-buy"><div class="modal-card"><div class="modal-head"><span>Mua Cá Mới</span><button class="modal-close" data-close="modal-buy">&times;</button></div><div class="buy-kinds"><div class="kind-card active" data-kind="guppy"><div><b>Cá Bảy Màu (Guppy)</b><small style="color:#94a3b8">Bơi nhanh, đuôi quạt</small></div><span>60 coin</span></div><div class="kind-card" data-kind="gold"><div><b>Cá Vàng (Gold)</b><small style="color:#94a3b8">Thân tròn, vây bồng</small></div><span>120 coin</span></div><div class="kind-card" data-kind="angel"><div><b>Cá Thần Tiên (Angel)</b><small style="color:#94a3b8">Dáng đĩa, vây cao vút</small></div><span>240 coin</span></div></div><input type="text" id="buy-name" maxlength="12" placeholder="Tên cá (tối đa 12 ký tự)"><button class="btn-main" id="btn-confirm-buy">Xác nhận mua</button></div></div>
+  <div class="modal hidden" id="modal-members"><div class="modal-card"><div class="modal-head"><span>Thành Viên Nuôi Chung</span><button class="modal-close" data-close="modal-members">&times;</button></div><div id="member-list" class="member-list"></div></div></div>
+  <div class="modal hidden" id="modal-lb"><div class="modal-card"><div class="modal-head"><span>Bảng Xếp Hạng</span><button class="modal-close" data-close="modal-lb">&times;</button></div><div id="lb-content" style="overflow-y:auto;max-height:300px"></div></div></div>
+</div>
+<script>
+/* ---------- Hằng số & Logic thuần ---------- */
+const CaLogic = {
+  C: { FISH_KINDS: { guppy: 60, gold: 120, angel: 240 }, FISH_MAX_SIZE: 3.0, FISH_FEED_GROW: 0.12, FISH_SIZE_MIN: 1.0, FISH_PAY_PER_MIN: 6, FISH_ACCRUE_CAP: 7200, FISH_FEED_GAP: 900, FISH_MAX_TANK: 40, FISH_MAX_OWNED: 8, NAME_MAX: 12 },
+  size(fed) { return Math.min(CaLogic.C.FISH_MAX_SIZE, +(1.0 + Math.max(0, Number(fed) || 0) * CaLogic.C.FISH_FEED_GROW).toFixed(3)); },
+  pay(fish, nowMs) {
+    const now = nowMs || Date.now(), last = (fish && (fish.lastPay || fish.bornAt)) || now;
+    const sec = Math.max(0, Math.min(CaLogic.C.FISH_ACCRUE_CAP, (now - last) / 1000));
+    return Math.floor(sec * ((fish && fish.size != null) ? fish.size : CaLogic.size(fish && fish.fed)) * CaLogic.C.FISH_PAY_PER_MIN / 60);
+  },
+  priceOf(kind) { return CaLogic.C.FISH_KINDS[kind] || 0; },
+  canBuy(coins, kind, ownedCount, tankCount) {
+    const p = CaLogic.priceOf(kind);
+    return Boolean(p > 0 && (coins || 0) >= p && (ownedCount || 0) < CaLogic.C.FISH_MAX_OWNED && (tankCount || 0) < CaLogic.C.FISH_MAX_TANK);
+  },
+  hueOf(ownerId) {
+    let n = 0;
+    if (typeof ownerId === 'number') n = ownerId;
+    else if (typeof ownerId === 'string') {
+      const p = parseInt(ownerId.replace(/^[^\d]*/, ''), 10);
+      if (!isNaN(p) && p > 0) n = p;
+      else { for (let i = 0; i < ownerId.length; i++) n = (n * 31 + ownerId.charCodeAt(i)) >>> 0; }
+    }
+    return Number(((BigInt(Math.abs(n || 1)) * 2654435761n) % 360n + 360n) % 360n);
+  },
+  move(fish, nowMs, tank) {
+    const t = nowMs || 0, w = (tank && (tank.w || tank.width)) || 360, h = (tank && (tank.h || tank.height)) || 640;
+    let s = String((fish && fish.id) || 1), idNum = 1;
+    for (let i = 0; i < s.length; i++) idNum = (Math.imul(31, idNum) + s.charCodeAt(i)) | 0;
+    idNum = Math.abs(idNum);
+    const sz = (fish && fish.size) || 1, spd = 0.0006 + 0.00035 / sz;
+    const pX = (idNum % 100) * 0.0628, pY = ((idNum >> 3) % 100) * 0.0628;
+    const fX = 0.75 + (idNum % 5) * 0.12, fY = 0.55 + ((idNum >> 2) % 5) * 0.1;
+    const padX = 40, padTop = 65, padBot = 85;
+    const effW = Math.max(40, w - padX * 2), effH = Math.max(40, h - padTop - padBot);
+    const ax = fX * t * spd + pX, ay = fY * t * spd + pY;
+    return { x: padX + effW * 0.5 + effW * 0.44 * Math.sin(ax), y: padTop + effH * 0.5 + effH * 0.4 * Math.sin(ay), dirX: Math.cos(ax) >= 0 ? 1 : -1, dirY: Math.cos(ay) >= 0 ? 1 : -1 };
+  },
+  parseState(jsonText) {
+    try { const d = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText; return (d && typeof d === 'object') ? d : null; } catch (e) { return null; }
+  }
+};
+window.CaLogic = CaLogic;
+/* ---------- Khởi tạo & Mạng ---------- */
+const WORKER = (window.GamesHub && window.GamesHub.WORKER) || 'https://games-hub-api.hdkhoa1302.workers.dev';
+let gameState = { fish: [], keepers: [] }, myKeeper = { id: 0, name: 'Tôi', coins: 0, earned: 0, fed: 0, fishes: 0 };
+let isGuestMode = false, selectedKind = 'guppy', dbgSeq = 0;
+const foods = [], bubbles = [], coinsFly = [];
+async function api(path, body) {
+  try {
+    const opts = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { method: 'GET', cache: 'no-store' };
+    const res = await fetch(WORKER + path, opts);
+    return await res.json();
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el.t); el.t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+function updateGuestBanner() { document.getElementById('guest-bar').classList.toggle('hidden', !isGuestMode); }
+function renderHud() {
+  const p = window.GamesHub ? window.GamesHub.player() : { id: 'guest', name: 'Khách' };
+  if (!myKeeper.name || myKeeper.name === 'Tôi') myKeeper.name = p.name;
+  if (!myKeeper.id && p.tgId) myKeeper.id = p.tgId;   // join lỗi vẫn biết cá nào của mình
+  const myOwned = gameState.fish.filter(f => String(f.ownerId) === String(myKeeper.id)).length;
+  document.getElementById('hud-coins').textContent = (myKeeper.coins || 0).toLocaleString('vi-VN');
+  document.getElementById('hud-fishes').textContent = myOwned + '/' + CaLogic.C.FISH_MAX_OWNED;
+  document.getElementById('hud-fed').textContent = myKeeper.fed || 0;
+  document.getElementById('hud-tank').textContent = gameState.fish.length + '/' + CaLogic.C.FISH_MAX_TANK;
+  let myPay = 0;
+  for (const f of gameState.fish) { if (String(f.ownerId) === String(myKeeper.id)) myPay += CaLogic.pay(f, Date.now()); }
+  const badge = document.getElementById('badge-pay');
+  if (myPay > 0) { badge.textContent = '+' + myPay; badge.classList.add('show'); } else badge.classList.remove('show');
+}
+async function joinAo() {
+  const idData = window.GamesHub ? window.GamesHub.initData() : '';
+  if (!idData) { isGuestMode = true; updateGuestBanner(); await fetchLive(); return; }
+  const res = await api('/fish/join', { initData: idData }); /* POST /fish/join */
+  if (res && res.ok) {
+    if (res.you) myKeeper = res.you;
+    if (res.fish) gameState.fish = res.fish;
+    if (res.keepers) gameState.keepers = res.keepers;
+    if (res.granted) showToast('Chào mừng bạn! Ao tặng bạn 1 chú cá con!');
+  } else { isGuestMode = true; updateGuestBanner(); await fetchLive(); }
+  renderHud();
+}
+async function fetchLive() {
+  const res = await api('/fish/live'); /* GET /fish/live */
+  if (res && res.ok) {
+    if (res.fish) {
+      const fedMap = new Map(gameState.fish.map(f => [f.id, f.fedAtLocal]));
+      res.fish.forEach(f => { if (fedMap.has(f.id)) f.fedAtLocal = fedMap.get(f.id); });
+      gameState.fish = res.fish;
+    }
+    if (res.keepers) gameState.keepers = res.keepers;
+    renderHud();
+  }
+}
+/* ---------- Đồ hoạ & Canvas ---------- */
+const canvas = document.getElementById('tank'), ctx = canvas.getContext('2d'), appEl = document.getElementById('app');
+function resize() {
+  const w = appEl.clientWidth, h = appEl.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+window.addEventListener('resize', resize);
+resize();
+for (let i = 0; i < 16; i++) {
+  bubbles.push({ x: Math.random() * 400, y: Math.random() * 700, r: 1.5 + Math.random() * 3, spd: 20 + Math.random() * 35 });
+}
+function drawFish(c, f, x, y, dirX, now) {
+  c.save(); c.translate(x, y); c.scale(dirX, 1);
+  const sz = f.size || 1; c.scale(sz, sz);
+  const hue = CaLogic.hueOf(f.ownerId || 0), finColor = 'hsla(' + hue + ',85%,60%,0.85)', kind = f.kind || 'guppy';
+  if (kind === 'guppy') {
+    c.beginPath(); c.ellipse(0, 0, 15, 6, 0, 0, Math.PI * 2); c.fillStyle = '#38bdf8'; c.fill();
+    c.beginPath(); c.moveTo(-11, 0); c.quadraticCurveTo(-20, -13, -28, -9); c.quadraticCurveTo(-24, 0, -28, 9); c.quadraticCurveTo(-20, 13, -11, 0); c.fillStyle = finColor; c.fill();
+    c.beginPath(); c.moveTo(-4, -6); c.quadraticCurveTo(2, -12, 7, -5); c.fillStyle = finColor; c.fill();
+  } else if (kind === 'gold') {
+    c.beginPath(); c.ellipse(0, 0, 14, 9, 0, 0, Math.PI * 2); c.fillStyle = '#fb923c'; c.fill();
+    c.beginPath(); c.moveTo(-9, -2); c.quadraticCurveTo(-18, -12, -25, -6); c.lineTo(-11, 0); c.quadraticCurveTo(-18, 12, -25, 6); c.closePath(); c.fillStyle = finColor; c.fill();
+    c.beginPath(); c.moveTo(-5, -9); c.quadraticCurveTo(1, -15, 7, -8); c.fillStyle = finColor; c.fill();
+  } else {
+    c.beginPath(); c.moveTo(14, 0); c.lineTo(-2, -13); c.lineTo(-12, 0); c.lineTo(-2, 13); c.closePath(); c.fillStyle = '#f1f5f9'; c.fill();
+    c.beginPath(); c.moveTo(2, -9); c.lineTo(2, 9); c.strokeStyle = '#475569'; c.lineWidth = 2; c.stroke();
+    c.beginPath(); c.moveTo(-2, -13); c.lineTo(-5, -24); c.lineTo(4, -13); c.fillStyle = finColor; c.fill();
+    c.beginPath(); c.moveTo(-2, 13); c.lineTo(-5, 24); c.lineTo(4, 13); c.fillStyle = finColor; c.fill();
+    c.beginPath(); c.moveTo(-12, 0); c.lineTo(-21, -6); c.lineTo(-21, 6); c.closePath(); c.fillStyle = finColor; c.fill();
+  }
+  c.beginPath(); c.arc(8, -2, 1.8, 0, Math.PI * 2); c.fillStyle = '#0f172a'; c.fill();
+  c.beginPath(); c.arc(8.5, -2.4, 0.6, 0, Math.PI * 2); c.fillStyle = '#fff'; c.fill();
+  c.restore();
+
+  const labelY = y - sz * 13 - 10, nameTxt = (f.name || 'Cá') + ' · ' + (f.owner || 'Ẩn danh');
+  c.font = '10px system-ui, sans-serif';
+  const tw = c.measureText(nameTxt).width;
+  c.fillStyle = 'rgba(8,24,38,0.72)';
+  if (c.roundRect) { c.beginPath(); c.roundRect(x - tw / 2 - 4, labelY - 9, tw + 8, 13, 3); c.fill(); }
+  else c.fillRect(x - tw / 2 - 4, labelY - 9, tw + 8, 13);
+  c.fillStyle = '#f8fafc'; c.textAlign = 'center'; c.fillText(nameTxt, x, labelY + 1.5);
+
+  const pay = CaLogic.pay(f, Date.now());
+  if (pay > 0) {
+    const pTxt = '+' + pay; c.font = 'bold 9px system-ui, sans-serif'; const pw = c.measureText(pTxt).width;
+    c.fillStyle = '#eab308';
+    if (c.roundRect) { c.beginPath(); c.roundRect(x - pw / 2 - 3, labelY - 24, pw + 6, 10, 2); c.fill(); }
+    else c.fillRect(x - pw / 2 - 3, labelY - 24, pw + 6, 10);
+    c.fillStyle = '#0f172a'; c.fillText(pTxt, x, labelY - 13);
+  }
+}
+let lastFrame = performance.now();
+function render(now) {
+  const dt = Math.min(0.08, (now - lastFrame) / 1000);
+  lastFrame = now;
+  const w = canvas.width, h = canvas.height;
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+  bgGrad.addColorStop(0, '#042438'); bgGrad.addColorStop(0.5, '#034164'); bgGrad.addColorStop(1, '#021827');
+  ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < bubbles.length; i++) {
+    const b = bubbles[i]; b.y -= b.spd * dt;
+    if (b.y < -10) { b.y = h + 10; b.x = Math.random() * w; }
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fill();
+  }
+  ctx.fillStyle = '#caa35e'; ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(0, h - 35);
+  ctx.quadraticCurveTo(w * 0.35, h - 45, w * 0.7, h - 30); ctx.quadraticCurveTo(w * 0.88, h - 22, w, h - 38);
+  ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
+  for (let s = 0; s < 4; s++) {
+    const sx = w * (0.15 + s * 0.25), sway = Math.sin(now * 0.002 + s * 1.5) * 12;
+    ctx.beginPath(); ctx.moveTo(sx, h - 20); ctx.quadraticCurveTo(sx + sway, h - 70, sx - sway * 0.5, h - 120);
+    ctx.strokeStyle = 'rgba(34,197,94,0.4)'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
+  }
+  /* Vị trí ĐANG VẼ của 1 con cá: đường bơi + lao tới viên thức ăn nếu đang đuổi. */
+  const drawn = (f, nowMs) => {
+    const p = CaLogic.move(f, nowMs, { w, h });
+    let x = f.overrideX != null ? f.overrideX : p.x;
+    let y = f.overrideY != null ? f.overrideY : p.y;
+    if (f.chase) {
+      const k = Math.min(1, (nowMs - (f.chaseAt || nowMs)) / 450);
+      x += (f.chase.x - x) * k; y += (f.chase.y - y) * k;
+      if (Math.abs(f.chase.x - x) > 2) p.dirX = f.chase.x > x ? 1 : -1;
+    }
+    f.drawX = x; f.drawY = y;
+    return p;
+  };
+  for (let i = foods.length - 1; i >= 0; i--) {
+    const fd = foods[i]; fd.y += 38 * dt;
+    if (fd.eater && fd.eater.chase) { fd.eater.chase.x = fd.x; fd.eater.chase.y = fd.y; }
+    ctx.beginPath(); ctx.arc(fd.x, fd.y, 3.5, 0, Math.PI * 2); ctx.fillStyle = '#f97316'; ctx.fill();
+    ctx.strokeStyle = '#c2410c'; ctx.lineWidth = 1; ctx.stroke();
+    let eaten = false;
+    for (const f of gameState.fish) {
+      drawn(f, now);
+      if (Math.hypot(f.drawX - fd.x, f.drawY - fd.y) < 20) {
+        foods.splice(i, 1); f.chase = null; feedFish(f); eaten = true; break;
+      }
+    }
+    if (!eaten && fd.y > h - 30) { foods.splice(i, 1); if (fd.eater) fd.eater.chase = null; }
+  }
+  for (const f of gameState.fish) {
+    const p = drawn(f, now);
+    drawFish(ctx, f, f.drawX, f.drawY, p.dirX, now);
+  }
+  for (let i = coinsFly.length - 1; i >= 0; i--) {
+    const cf = coinsFly[i]; cf.prog += dt * 1.8;
+    const cx = cf.sx + (cf.tx - cf.sx) * cf.prog, cy = cf.sy + (cf.ty - cf.sy) * cf.prog - Math.sin(cf.prog * Math.PI) * 40;
+    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fillStyle = '#eab308'; ctx.fill();
+    if (cf.prog >= 1) coinsFly.splice(i, 1);
+  }
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+/* ---------- Tương tác & Giao diện ---------- */
+function spawnFood(x, y) {
+  const now = performance.now(), w = canvas.width, h = canvas.height;
+  let best = null, bestD = Infinity;
+  for (const f of gameState.fish) {
+    const p = CaLogic.move(f, now, { w, h });
+    const fx = f.overrideX != null ? f.overrideX : p.x, fy = f.overrideY != null ? f.overrideY : p.y;
+    const d = Math.hypot(fx - x, fy - y);
+    if (d < bestD) { bestD = d; best = f; }
+  }
+  if (best) { best.chase = { x: x, y: y }; best.chaseAt = now; }
+  foods.push({ x: x, y: y, born: Date.now(), eater: best });
+}
+canvas.addEventListener('pointerdown', (e) => {
+  if (isGuestMode) { showToast('Mở trong Telegram để cùng nuôi'); return; }
+  const r = canvas.getBoundingClientRect();
+  spawnFood((e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height));
+});
+async function feedFish(fish) {
+  const now = Date.now();
+  if (fish.fedAtLocal && now - fish.fedAtLocal < CaLogic.C.FISH_FEED_GAP) return;
+  fish.fedAtLocal = now;
+  const idData = window.GamesHub ? window.GamesHub.initData() : '';
+  const res = await api('/fish/feed', { initData: idData, fishId: fish.id }); /* POST /fish/feed */
+  if (res && res.ok) {
+    fish.size = res.size; fish.fed = res.fed;
+    if (res.yourFed != null) myKeeper.fed = res.yourFed;
+    renderHud();
+  } else if (res && res.why === 'too-fast') { showToast('Từ từ thôi bạn ơi!'); }
+}
+document.getElementById('btn-collect').onclick = async () => {
+  if (isGuestMode) { showToast('Mở trong Telegram để cùng nuôi'); return; }
+  const idData = window.GamesHub ? window.GamesHub.initData() : '';
+  const res = await api('/fish/collect', { initData: idData }); /* POST /fish/collect */
+  if (res && res.ok) {
+    myKeeper.coins = res.coins; myKeeper.earned = (myKeeper.earned || 0) + (res.collected || 0);
+    if (res.fish) gameState.fish = res.fish;
+    showToast(res.collected > 0 ? ('Đã thu +' + res.collected + ' coin!') : 'Chưa có coin để thu');
+    const w = canvas.width, h = canvas.height;
+    for (const f of gameState.fish) {
+      if (String(f.ownerId) === String(myKeeper.id)) {
+        const p = CaLogic.move(f, performance.now(), { w, h });
+        coinsFly.push({ sx: p.x, sy: p.y, tx: 35, ty: 25, prog: 0 });
+      }
+    }
+    renderHud();
+    if (window.GamesHub) { const lb = window.GamesHub.leaderboard('nuoi-ca'); lb.submit(myKeeper.earned); }
+  } else { showToast('Chưa có coin để thu'); }
+};
+document.getElementById('btn-buy').onclick = () => {
+  if (isGuestMode) { showToast('Mở trong Telegram để cùng nuôi'); return; }
+  document.getElementById('buy-name').value = myKeeper.name ? (myKeeper.name.slice(0, 8) + ' con') : 'Cá con';
+  document.getElementById('modal-buy').classList.remove('hidden');
+};
+document.querySelectorAll('.kind-card').forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll('.kind-card').forEach(c => c.classList.remove('active'));
+    el.classList.add('active'); selectedKind = el.getAttribute('data-kind');
+  };
+});
+document.getElementById('btn-confirm-buy').onclick = async () => {
+  const name = (document.getElementById('buy-name').value.trim() || '').slice(0, CaLogic.C.NAME_MAX);
+  const myOwned = gameState.fish.filter(f => String(f.ownerId) === String(myKeeper.id)).length;
+  if (!CaLogic.canBuy(myKeeper.coins, selectedKind, myOwned, gameState.fish.length)) {
+    if (myKeeper.coins < CaLogic.priceOf(selectedKind)) showToast('Chưa đủ coin');
+    else if (myOwned >= CaLogic.C.FISH_MAX_OWNED) showToast('Bạn đã có tối đa 8 con cá');
+    else if (gameState.fish.length >= CaLogic.C.FISH_MAX_TANK) showToast('Ao đã đầy cá (tối đa 40 con)');
+    return;
+  }
+  const idData = window.GamesHub ? window.GamesHub.initData() : '';
+  const res = await api('/fish/buy', { initData: idData, kind: selectedKind, name: name }); /* POST /fish/buy */
+  if (res && res.ok) {
+    if (res.fish) gameState.fish.push(res.fish);
+    myKeeper.coins = res.coins; myKeeper.fishes = (myKeeper.fishes || 0) + 1;
+    document.getElementById('modal-buy').classList.add('hidden');
+    showToast('Mua thành công cá ' + name + '!');
+    renderHud();
+  } else { showToast((res && res.why === 'poor') ? 'Chưa đủ coin' : 'Không mua được cá lúc này'); }
+};
+document.getElementById('btn-members').onclick = () => {
+  const list = document.getElementById('member-list'), keepers = gameState.keepers || [];
+  if (!keepers.length) { list.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:12px">Chưa có thành viên</div>'; }
+  else {
+    list.innerHTML = keepers.map(k => {
+      const hue = CaLogic.hueOf(k.user_id || k.id);
+      return '<div class="member-item"><div class="member-dot" style="background:hsl(' + hue + ',85%,60%)"></div><div class="member-name">' + (k.name || 'Người nuôi') + '</div><div class="member-stat"><div>' + (k.fishes || 0) + ' cá</div><div style="color:#eab308">' + (k.coins || 0) + ' coin</div></div></div>';
+    }).join('');
+  }
+  document.getElementById('modal-members').classList.remove('hidden');
+};
+document.getElementById('btn-lb').onclick = () => {
+  const c = document.getElementById('lb-content');
+  if (window.GamesHub && window.GamesHub.renderLeaderboard) { window.GamesHub.renderLeaderboard(c, 'nuoi-ca'); }
+  document.getElementById('modal-lb').classList.remove('hidden');
+};
+document.querySelectorAll('[data-close]').forEach(b => {
+  b.onclick = () => document.getElementById(b.getAttribute('data-close')).classList.add('hidden');
+});
+joinAo();
+setInterval(fetchLive, 2500);
+/* ---------- Debug Hook ---------- */
+if (location.search.includes('debug=1')) {
+  window.CaDebug = {
+    state() { return gameState; },
+    fish() {
+      const now = performance.now(), w = canvas.width, h = canvas.height;
+      return (gameState.fish || []).map(f => {
+        const p = CaLogic.move(f, now, { w, h });
+        return {
+          id: f.id, name: f.name, owner: f.owner, kind: f.kind, size: f.size,
+          x: f.overrideX != null ? f.overrideX : p.x,
+          y: f.overrideY != null ? f.overrideY : p.y,
+          pay: CaLogic.pay(f, Date.now())
+        };
+      });
+    },
+    spawnAt(kind, x, y) {
+      const f = {
+        id: 'dbg_' + (++dbgSeq), ownerId: myKeeper.id || 1, owner: myKeeper.name || 'Debug',
+        kind: kind || 'guppy', name: 'DebugFish', size: 1.0, fed: 0, bornAt: Date.now(), lastPay: Date.now(),
+        overrideX: x, overrideY: y
+      };
+      gameState.fish.push(f);
+      return f;
+    },
+    feedAt(x, y) { spawnFood(x, y); },
+    setGuest(bool) { isGuestMode = Boolean(bool); updateGuestBanner(); }
+  };
+}
+</script>
+</body>
+</html>

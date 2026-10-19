@@ -124,3 +124,35 @@ CREATE TABLE IF NOT EXISTS world_bots (
   working_at INTEGER NOT NULL DEFAULT 0,       -- ms mốc cập nhật cờ làm việc
   agy_working INTEGER NOT NULL DEFAULT 0       -- 1 = agy đang làm việc (lưu ở bản ghi hermes)
 );
+
+-- ============ Ao Cá Của Ae (nuôi cá chung, kiểu Insaniquarium free-play) ============
+-- Một ao chung cho cả nhóm: ai cũng cho ăn được cá của người khác.
+-- Kích thước cá suy ra từ `fed` (số lần ăn), coin đẻ ra suy ra từ `last_pay` —
+-- KHÔNG ghi DB theo nhịp, chỉ ghi khi có người cho ăn / thu tiền / mua cá.
+CREATE TABLE IF NOT EXISTS fish (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id INTEGER NOT NULL,
+  owner    TEXT    NOT NULL DEFAULT '',       -- tên chủ, để hiện trên nhãn
+  kind     TEXT    NOT NULL DEFAULT 'guppy',  -- guppy | gold | angel
+  name     TEXT    NOT NULL DEFAULT '',       -- tên riêng của cá
+  fed      INTEGER NOT NULL DEFAULT 0,        -- số lần đã ăn (q: ai cho ăn không lưu)
+  born_at  INTEGER NOT NULL DEFAULT 0,        -- ms
+  fed_at   INTEGER NOT NULL DEFAULT 0,        -- ms lần ăn gần nhất (chặn cho ăn liên tục)
+  last_pay INTEGER NOT NULL DEFAULT 0,        -- ms mốc thu tiền gần nhất
+  alive    INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_fish_owner ON fish (owner_id);
+CREATE INDEX IF NOT EXISTS idx_fish_alive ON fish (alive, id);
+
+-- Ví + thành tích của từng thành viên trong ao.
+CREATE TABLE IF NOT EXISTS keepers (
+  user_id INTEGER PRIMARY KEY,
+  name    TEXT    NOT NULL DEFAULT '',
+  coins   INTEGER NOT NULL DEFAULT 0,         -- coin đang giữ
+  earned  INTEGER NOT NULL DEFAULT 0,         -- tổng coin đã thu (điểm xếp hạng)
+  fed     INTEGER NOT NULL DEFAULT 0,         -- số lần cho ăn (kể cả cá người khác)
+  fishes  INTEGER NOT NULL DEFAULT 0,         -- số cá đang sở hữu
+  granted INTEGER NOT NULL DEFAULT 0,         -- 1 = đã nhận cá tặng đầu tiên
+  seen    INTEGER NOT NULL DEFAULT 0          -- ms lần cuối mở app
+);
