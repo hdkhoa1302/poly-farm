@@ -688,7 +688,10 @@ const PET = {
   furD:   new THREE.MeshLambertMaterial({ color: 0x8f6534 }),
   nose:   new THREE.MeshLambertMaterial({ color: 0x2a2320 }),
   tongue: new THREE.MeshLambertMaterial({ color: 0xe0666f }),
-  collar: new THREE.MeshLambertMaterial({ color: 0xd24b4b })
+  collar: new THREE.MeshLambertMaterial({ color: 0xd24b4b }),
+  /* đồ của ZeroBot: bot nhỏ mặc váy hồng */
+  dress:  new THREE.MeshLambertMaterial({ color: 0xff9dc0 }),
+  ribbon: new THREE.MeshLambertMaterial({ color: 0xff5c9a })
 };
 
 function petBox(g, w, h, d, x, y, z, mat) {
@@ -726,38 +729,44 @@ function buildRobot() {
   petBox(g, 0.02, 0.12, 0.02, 0, 1.14, 0, PET.shellD);       // ăng ten
   petBox(g, 0.05, 0.05, 0.05, 0, 1.22, 0, PET.glow);
   const hand = new THREE.Object3D();
-  hand.position.set(0.2, 0.55, 0.22);                        // chỗ buộc dây dắt (chìa ra trước)
+  hand.position.set(0.2, 0.55, 0.22);                        // chỗ buộc dây dắt (chìa ra trước, chỗ móc dây kết nối)
   g.add(hand);
   g.userData = { limbs: { legL, legR, armL, armR }, hand };
   return g;
 }
 
-function buildDog() {
+/* ZeroBot — cá thể thứ hai của thế giới: BOT NHỎ MẶC VÁY HỒNG (trước đây là
+   con chó). Cao ~1,15 đv, thấp hơn Hermes; vẫn dựng bằng khối vuông cho khớp
+   phong cách thế giới, có sẵn điểm móc dây kết nối ở vai. */
+function buildZeroBot() {
   const g = new THREE.Group();
-  const legFL = petLimb(g, 0.09, 0.18, 0.09, -0.12, 0.2,  0.2, PET.furD);
-  const legFR = petLimb(g, 0.09, 0.18, 0.09,  0.12, 0.2,  0.2, PET.furD);
-  const legBL = petLimb(g, 0.09, 0.18, 0.09, -0.12, 0.2, -0.2, PET.furD);
-  const legBR = petLimb(g, 0.09, 0.18, 0.09,  0.12, 0.2, -0.2, PET.furD);
-  petBox(g, 0.3, 0.24, 0.54, 0, 0.34, 0, PET.fur);           // thân
-  petBox(g, 0.26, 0.22, 0.24, 0, 0.48, 0.34, PET.fur);       // đầu
-  petBox(g, 0.14, 0.11, 0.14, 0, 0.43, 0.5, PET.furD);       // mõm
-  petBox(g, 0.06, 0.05, 0.03, 0, 0.45, 0.575, PET.nose);     // mũi
-  petBox(g, 0.09, 0.16, 0.04, -0.09, 0.63, 0.3, PET.furD);   // tai
-  petBox(g, 0.09, 0.16, 0.04,  0.09, 0.63, 0.3, PET.furD);
-  petBox(g, 0.05, 0.05, 0.02, -0.07, 0.52, 0.465, PET.nose); // mắt
-  petBox(g, 0.05, 0.05, 0.02,  0.07, 0.52, 0.465, PET.nose);
-  petBox(g, 0.06, 0.05, 0.1, 0, 0.38, 0.56, PET.tongue);     // lưỡi
-  petBox(g, 0.3, 0.06, 0.3, 0, 0.42, 0.24, PET.collar);      // vòng cổ
-  const tail = petLimb(g, 0.07, 0.26, 0.07, 0, 0.46, -0.26, PET.fur);
-  tail.rotation.x = -0.9;
+  const legL = petLimb(g, 0.09, 0.22, 0.09, -0.08, 0.26, 0, PET.shellD);   // chân
+  const legR = petLimb(g, 0.09, 0.22, 0.09,  0.08, 0.26, 0, PET.shellD);
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.32, 0.34, 8), PET.dress);
+  skirt.position.set(0, 0.42, 0);                        // váy xòe
+  skirt.castShadow = true;
+  g.add(skirt);
+  petBox(g, 0.28, 0.2, 0.22, 0, 0.63, 0, PET.dress);         // thân trên
+  petBox(g, 0.3, 0.05, 0.24, 0, 0.53, 0, PET.ribbon);        // đai lưng hồng đậm
+  petBox(g, 0.07, 0.07, 0.07, 0, 0.53, 0.14, PET.ribbon);    // nơ trước bụng
+  petBox(g, 0.3, 0.05, 0.24, 0, 0.72, 0, PET.shell);         // cổ áo trắng
+  const armL = petLimb(g, 0.07, 0.24, 0.07, -0.2, 0.7, 0, PET.dress);
+  const armR = petLimb(g, 0.07, 0.24, 0.07,  0.2, 0.7, 0, PET.dress);
+  petBox(g, 0.08, 0.07, 0.08, 0, 0.79, 0, PET.shellD);       // cổ
+  petBox(g, 0.28, 0.24, 0.24, 0, 0.94, 0, PET.shell);        // đầu
+  petBox(g, 0.11, 0.06, 0.02, -0.07, 0.96, 0.126, PET.glow); // mắt
+  petBox(g, 0.11, 0.06, 0.02,  0.07, 0.96, 0.126, PET.glow);
+  petBox(g, 0.29, 0.03, 0.26, 0, 1.06, 0, PET.ribbon);       // băng đô hồng
+  const bow = petLimb(g, 0.12, 0.12, 0.1, 0.15, 1.16, 0, PET.ribbon);  // nơ trên đầu
+  bow.rotation.z = 0.5;
   const collar = new THREE.Object3D();
-  collar.position.set(0, 0.46, 0.24);                        // chỗ móc dây
+  collar.position.set(0, 0.72, 0.17);                        // điểm móc dây kết nối
   g.add(collar);
-  g.userData = { limbs: { legFL, legFR, legBL, legBR, tail }, collar };
+  g.userData = { limbs: { legL, legR, armL, armR, bow }, collar };
   return g;
 }
 
-/* dây dắt: đường gấp khúc có độ võng, cập nhật lại mỗi khung hình */
+/* dây kết nối Hermes ↔ ZeroBot: đường gấp khúc có độ võng, vẽ lại mỗi khung hình */
 const leashGeo = new THREE.BufferGeometry();
 leashGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(4 * 3), 3));
 const leash = new THREE.Line(leashGeo, new THREE.LineBasicMaterial({ color: 0xf0d9a0 }));
@@ -821,9 +830,9 @@ function updateBots(list) {
  * (Walker cục bộ) chỉ còn là đường dự phòng khi máy chủ cũ / mất mạng.
  * ================================================================== */
 const WALK_POINTS = [
-  () => 'Đang dắt ZeroBot đi dạo quanh làng…',
+  () => 'ZeroBot lẽo đẽo theo sau, cùng đi dạo quanh làng…',
   () => 'Ghé chỗ nào có bóng mát ngồi chơi chút đã…',
-  () => 'ZeroBot đánh hơi thấy gì đó, cho nó rẽ vào xem…',
+  () => 'ZeroBot quét thấy gì đó, cho nó rẽ vào xem…',
   () => 'Ngắm cảnh một lát rồi đi tiếp nhé…'
 ];
 
@@ -877,7 +886,7 @@ class Walker {
     this.nextPickAt = 0;       // mốc giờ thực được phép chọn chỗ mới
     this.restUntil = 0;
     this.arrivedAt = 0;
-    this.speed = 3.0;          // chậm hơn người chơi cho ra dáng dắt chó đi dạo
+    this.speed = 3.0;          // chậm hơn người chơi cho ra dáng bot lẽo đẽo theo sau
     /* Vị trí RIÊNG của hai cá thể. Trước đây chúng mượn player.x/z nên cứ dính
        lấy nhân vật của ae, và còn lái luôn nhân vật ấy. Giờ đi lộ trình của
        mình: ae đi đường ae, tụi này đi đường tụi này. */
@@ -901,7 +910,7 @@ class Walker {
       this.mode = 'rest';
       this.restUntil = now + 9000 + Math.random() * 9000;    // 9–18 giây ngồi chơi
       this.nextPickAt = this.restUntil + 3000 + Math.random() * 5000;
-      pals.say('Ghé đây ngồi chơi chút nhé ZeroBot 🐾');
+      pals.say('Ghé đây nghỉ chút nhé ZeroBot 🎀');
       return;
     }
     this.nextPickAt = now + 5000 + Math.random() * 6000;
@@ -911,7 +920,7 @@ class Walker {
     this.way = { x: p.x, z: p.z, at: now, rest: p.y };
     this.yaw = Math.atan2(p.x - this.x, p.z - this.z);
     pals.say(WALK_POINTS[Math.floor(Math.random() * WALK_POINTS.length)]());
-    if (Math.random() < 0.45) pals.sayDog(['Gâu! 🐾', 'Gâu gâu!', 'Hức hức… 🐾', 'Gâu! (đi đâu đó?)'][Math.floor(Math.random() * 4)], 2000);
+    if (Math.random() < 0.45) pals.sayZero(['Bíp bíp! 🎀', 'Đang quét khu vực…', 'Ting! Có tín hiệu lạ', 'Bíp! (đi đâu đó?)'][Math.floor(Math.random() * 4)], 2000);
   }
 
   /** tự đi; trả về true khi mình đang thật sự cầm lái */
@@ -974,21 +983,21 @@ async function spawnWalker() {
 function buildPals() {
   const root = new THREE.Group();
   const robot = buildRobot();
-  const dog = buildDog();
+  const zero = buildZeroBot();
   const robotLabel = labelSprite('Hermes · robot', 198);
-  const dogLabel = labelSprite('ZeroBot 🐾', 38);
-  root.add(robot, dog, leash, robotLabel, dogLabel);
+  const zeroLabel = labelSprite('ZeroBot 🎀', 38);
+  root.add(robot, zero, leash, robotLabel, zeroLabel);
 
-  const pos = new THREE.Vector3(), dogPos = new THREE.Vector3();
+  const pos = new THREE.Vector3(), zeroPos = new THREE.Vector3();
   const vHand = new THREE.Vector3(), vCollar = new THREE.Vector3();
-  let yaw = 0, dogYaw = 0, placed = false, walk = 0, lastX = 0, lastZ = 0;
+  let yaw = 0, zeroYaw = 0, placed = false, walk = 0, lastX = 0, lastZ = 0;
   const bench = buildBench();
   root.add(bench);
   const sayBubble = makeBubble(13);            // bong bóng nói của mình
-  const dogBubble = makeBubble(9);             // bong bóng bên chó
-  root.add(sayBubble, dogBubble);
-  let sayUntil = 0, dogSayUntil = 0;
-  let lastHermesSay = '', lastDogSay = '';
+  const zeroBubble = makeBubble(9);             // bong bóng bên ZeroBot
+  root.add(sayBubble, zeroBubble);
+  let sayUntil = 0, zeroSayUntil = 0;
+  let lastHermesSay = '', lastZeroSay = '';
   const walker = new Walker();
 
   /* Bàn ghế laptop làm việc của Hermes */
@@ -1022,7 +1031,7 @@ function buildPals() {
     get workProgress() { return hermesWorkProgress; },
     get agyProgress() { return agyWorkProgress; },
     say(text, ms) { drawBubble(sayBubble, text, 198, 34); sayUntil = performance.now() + (ms || 3600); },
-    sayDog(text, ms) { drawBubble(dogBubble, text, 38, 30); dogSayUntil = performance.now() + (ms || 2600); },
+    sayZero(text, ms) { drawBubble(zeroBubble, text, 38, 30); zeroSayUntil = performance.now() + (ms || 2600); },
     update(dt, now, p) {
       this.frames++;
       if (!p.ready) { root.visible = false; return; }
@@ -1042,10 +1051,10 @@ function buildPals() {
           pos.set(bH.baseX, topAt(Math.floor(bH.baseX), Math.floor(bH.baseZ)), bH.baseZ);
           const dzX = bD ? bD.baseX : bH.baseX;
           const dzZ = bD ? bD.baseZ : bH.baseZ + 1;
-          dogPos.set(dzX, topAt(Math.floor(dzX), Math.floor(dzZ)), dzZ);
+          zeroPos.set(dzX, topAt(Math.floor(dzX), Math.floor(dzZ)), dzZ);
           lastX = pos.x; lastZ = pos.z;
           yaw = bH.yaw || 0;
-          dogYaw = bD ? (bD.yaw || 0) : yaw;
+          zeroYaw = bD ? (bD.yaw || 0) : yaw;
           placed = true;
         }
 
@@ -1072,7 +1081,7 @@ function buildPals() {
                 pxD += ((bD.tx - bD.baseX) / dD) * m;
                 pzD += ((bD.tz - bD.baseZ) / dD) * m;
                 const ty = Math.atan2(bD.tx - bD.baseX, bD.tz - bD.baseZ);
-                dogYaw += (ty - dogYaw) * Math.min(1, dt / 180);
+                zeroYaw += (ty - zeroYaw) * Math.min(1, dt / 180);
               }
             }
 
@@ -1082,14 +1091,14 @@ function buildPals() {
             pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
 
             if (bD) {
-              dogPos.x += (pxD - dogPos.x) * kw;
-              dogPos.z += (pzD - dogPos.z) * kw;
-              dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+              zeroPos.x += (pxD - zeroPos.x) * kw;
+              zeroPos.z += (pzD - zeroPos.z) * kw;
+              zeroPos.y = topAt(Math.floor(zeroPos.x), Math.floor(zeroPos.z));
             } else {
               const kd = Math.min(1, dt / 120);
-              dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
-              dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
-              dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+              zeroPos.x += (pos.x + Math.sin(yaw) * 1.2 - zeroPos.x) * kd;
+              zeroPos.z += (pos.z + Math.cos(yaw) * 1.2 - zeroPos.z) * kd;
+              zeroPos.y = topAt(Math.floor(zeroPos.x), Math.floor(zeroPos.z));
             }
           } else {
             // Khi Hermes làm việc: robot đứng yên tại chỗ
@@ -1098,10 +1107,10 @@ function buildPals() {
             const dogSeatX = pos.x - Math.cos(yaw) * 0.75 + Math.sin(yaw) * 0.2;
             const dogSeatZ = pos.z + Math.sin(yaw) * 0.75 + Math.cos(yaw) * 0.2;
             const kd = Math.min(1, dt / 100);
-            dogPos.x += (dogSeatX - dogPos.x) * kd;
-            dogPos.z += (dogSeatZ - dogPos.z) * kd;
-            dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
-            dogYaw += (yaw + 0.3 - dogYaw) * Math.min(1, dt / 180);
+            zeroPos.x += (dogSeatX - zeroPos.x) * kd;
+            zeroPos.z += (dogSeatZ - zeroPos.z) * kd;
+            zeroPos.y = topAt(Math.floor(zeroPos.x), Math.floor(zeroPos.z));
+            zeroYaw += (yaw + 0.3 - zeroYaw) * Math.min(1, dt / 180);
           }
         }
 
@@ -1110,10 +1119,10 @@ function buildPals() {
           lastHermesSay = bH.say;
         } else if (!bH.say) lastHermesSay = '';
 
-        if (bD && bD.say && bD.say !== lastDogSay) {
-          this.sayDog(bD.say, 2600);
-          lastDogSay = bD.say;
-        } else if (!bD || !bD.say) lastDogSay = '';
+        if (bD && bD.say && bD.say !== lastZeroSay) {
+          this.sayZero(bD.say, 2600);
+          lastZeroSay = bD.say;
+        } else if (!bD || !bD.say) lastZeroSay = '';
 
         isResting = bH.mode === 'rest';
       } else if (WORLD && (!WORLD.bots || !WORLD.bots.length)) {
@@ -1129,7 +1138,7 @@ function buildPals() {
           walker.x = def.ox; walker.z = def.oz; walker.yaw = 0; walker.placed = true;
         }
         const tx = walker.x, tz = walker.z;
-        if (!placed) { pos.set(tx, 0, tz); dogPos.set(tx, 0, tz + 1); lastX = tx; lastZ = tz; placed = true; }
+        if (!placed) { pos.set(tx, 0, tz); zeroPos.set(tx, 0, tz + 1); lastX = tx; lastZ = tz; placed = true; }
 
         if (!isHermesWorking) {
           const k = Math.min(1, dt / 150);
@@ -1137,23 +1146,23 @@ function buildPals() {
           pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
 
           const kd = Math.min(1, dt / 120);
-          dogPos.x += (pos.x + Math.sin(yaw) * 1.2 - dogPos.x) * kd;
-          dogPos.z += (pos.z + Math.cos(yaw) * 1.2 - dogPos.z) * kd;
-          dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+          zeroPos.x += (pos.x + Math.sin(yaw) * 1.2 - zeroPos.x) * kd;
+          zeroPos.z += (pos.z + Math.cos(yaw) * 1.2 - zeroPos.z) * kd;
+          zeroPos.y = topAt(Math.floor(zeroPos.x), Math.floor(zeroPos.z));
 
           yaw += (walker.yaw - yaw) * Math.min(1, dt / 240);
-          const dxv = dogPos.x - pos.x, dzv = dogPos.z - pos.z;
+          const dxv = zeroPos.x - pos.x, dzv = zeroPos.z - pos.z;
           if (dxv * dxv + dzv * dzv > 0.02) {
-            dogYaw += (Math.atan2(dxv, dzv) - dogYaw) * Math.min(1, dt / 180);
+            zeroYaw += (Math.atan2(dxv, dzv) - zeroYaw) * Math.min(1, dt / 180);
           }
         } else {
           pos.y = topAt(Math.floor(pos.x), Math.floor(pos.z));
           const dogSeatX = pos.x - Math.cos(yaw) * 0.75 + Math.sin(yaw) * 0.2;
           const dogSeatZ = pos.z + Math.sin(yaw) * 0.75 + Math.cos(yaw) * 0.2;
           const kd = Math.min(1, dt / 100);
-          dogPos.x += (dogSeatX - dogPos.x) * kd;
-          dogPos.z += (dogSeatZ - dogPos.z) * kd;
-          dogPos.y = topAt(Math.floor(dogPos.x), Math.floor(dogPos.z));
+          zeroPos.x += (dogSeatX - zeroPos.x) * kd;
+          zeroPos.z += (dogSeatZ - zeroPos.z) * kd;
+          zeroPos.y = topAt(Math.floor(zeroPos.x), Math.floor(zeroPos.z));
         }
         isResting = walker.mode === 'rest';
       } else {
@@ -1175,54 +1184,54 @@ function buildPals() {
 
       robot.position.copy(pos);
       robot.rotation.y = yaw;
-      dog.position.copy(dogPos);
-      dog.rotation.y = dogYaw;
+      zero.position.copy(zeroPos);
+      zero.rotation.y = zeroYaw;
       robot.scale.setScalar(1.05);
-      dog.scale.setScalar(1.18);
+      zero.scale.setScalar(1.0);
 
       /* nhịp bước tính theo quãng đường thật đã đi → đứng yên là chân đứng yên */
       const step = Math.hypot(pos.x - lastX, pos.z - lastZ);
       lastX = pos.x; lastZ = pos.z;
       walk += Math.min(step, 0.6) * 7;
-      const R = robot.userData.limbs, D = dog.userData.limbs;
+      const R = robot.userData.limbs, D = zero.userData.limbs;
       const amp = Math.min(0.75, step * 22);
       const idling = step < 0.004;
 
       if (idling) {
-        /* đứng lại: robot đứng nghiêm, ZeroBot ngồi thở, đuôi vẫn ve vẩy */
+        /* đứng lại: robot đứng nghiêm, ZeroBot đứng thở, nơ vẫn ve vẩy */
         R.legL.rotation.x += (0 - R.legL.rotation.x) * 0.12;
         R.legR.rotation.x += (0 - R.legR.rotation.x) * 0.12;
         R.armL.rotation.x += (0 - R.armL.rotation.x) * 0.12;
         R.armR.rotation.x += (0.34 - R.armR.rotation.x) * 0.12;    // tay cầm dây hơi đưa ra
         const sit = Math.sin(now / 900) * 0.05;
-        D.legFL.rotation.x += (1.15 - D.legFL.rotation.x) * 0.1;
-        D.legFR.rotation.x += (1.15 - D.legFR.rotation.x) * 0.1;
-        D.legBL.rotation.x += (-0.35 - D.legBL.rotation.x) * 0.1;
-        D.legBR.rotation.x += (-0.35 - D.legBR.rotation.x) * 0.1;
-        dog.position.y += 0.06 + sit;
-        D.tail.rotation.z = Math.sin(now / 150) * 0.55;
+        D.legL.rotation.x += (0 - D.legL.rotation.x) * 0.12;
+        D.legR.rotation.x += (0 - D.legR.rotation.x) * 0.12;
+        D.armL.rotation.x += (0 - D.armL.rotation.x) * 0.12;
+        D.armR.rotation.x += (0 - D.armR.rotation.x) * 0.12;
+        zero.position.y += 0.02 + sit * 0.4;                 // bot đứng thở nhè nhẹ
+        D.bow.rotation.z = 0.5 + Math.sin(now / 150) * 0.2;  // nơ trên đầu ve vẩy
       } else {
         const sw = Math.sin(walk) * amp;
         R.legL.rotation.x = sw;  R.legR.rotation.x = -sw;
         R.armL.rotation.x = -sw * 0.7;
         R.armR.rotation.x = 0.3 + sw * 0.35;
-        D.legFL.rotation.x = sw;  D.legBR.rotation.x = sw;
-        D.legFR.rotation.x = -sw; D.legBL.rotation.x = -sw;
-        D.tail.rotation.z = Math.sin(now / 110) * 0.8;
-        D.tail.rotation.x = -0.9 + Math.sin(walk * 0.5) * 0.15;
-        /* lạch cạch nhẹ cho có sức sống */
+        D.legL.rotation.x = sw;  D.legR.rotation.x = -sw;
+        D.armL.rotation.x = -sw * 0.8;
+        D.armR.rotation.x = sw * 0.8;
+        D.bow.rotation.z = 0.5 + Math.sin(now / 110) * 0.25;
+        /* nhún nhẹ cho có sức sống */
         robot.position.y += Math.abs(Math.sin(walk)) * 0.03;
-        dog.position.y += Math.abs(Math.sin(walk)) * 0.02;
+        zero.position.y += Math.abs(Math.sin(walk)) * 0.02;
       }
 
-      /* dây dắt nối tay robot với cổ ZeroBot */
+      /* dây kết nối: tay Hermes ↔ vai ZeroBot */
       if (hermesWorkProgress > 0.4) {
         leash.visible = false;
       } else {
         leash.visible = true;
-        if (robot.userData.hand && dog.userData.collar) {
+        if (robot.userData.hand && zero.userData.collar) {
           robot.userData.hand.getWorldPosition(vHand);
-          dog.userData.collar.getWorldPosition(vCollar);
+          zero.userData.collar.getWorldPosition(vCollar);
           const span = Math.hypot(vCollar.x - vHand.x, vCollar.z - vHand.z);
           const sag = 0.06 + Math.min(0.42, span * 0.12);
           const arr = leashGeo.attributes.position.array;
@@ -1241,19 +1250,19 @@ function buildPals() {
       const resting = isResting && hermesWorkProgress < 0.05;
       const benchYaw = yaw + Math.PI;            // mặt hướng ra ngoài
       robot.scale.setScalar(resting ? 1.0 : 1.05);
-      dog.scale.setScalar(resting ? 1.1 : 1.18);
+      zero.scale.setScalar(resting ? 0.95 : 1.0);
       if (resting) {
         pos.y += 0.5;                                   // ngồi lên mặt ghế
         robot.rotation.x = -0.14;                       // hơi ngả lưng
         bench.visible = true;
         bench.position.set(pos.x - Math.sin(benchYaw) * 0.22, topAt(Math.floor(pos.x), Math.floor(pos.z)), pos.z - Math.cos(benchYaw) * 0.22);
         bench.rotation.y = benchYaw + Math.PI;
-        const sitB = { legFL: 1.25, legFR: 1.25, legBL: -0.4, legBR: -0.4 };
+        const sitB = { legL: -1.3, legR: -1.3, armL: -0.35, armR: -0.35 };
         for (const k in sitB) D[k].rotation.x += (sitB[k] - D[k].rotation.x) * 0.14;
-        dogPos.y += 0.02 + Math.sin(now / 380) * 0.015; // chó ngồi thở nhè nhẹ
-        D.tail.rotation.z = Math.sin(now / 130) * 0.6;
-        const ddx = pos.x - dogPos.x, ddz = pos.z - dogPos.z;
-        if (ddx * ddx + ddz * ddz > 0.01) dogYaw += (Math.atan2(ddx, ddz) - dogYaw) * Math.min(1, dt / 180);
+        zeroPos.y += 0.02 + Math.sin(now / 380) * 0.015; // bot ngồi thở nhè nhẹ
+        D.bow.rotation.z = Math.sin(now / 130) * 0.6;
+        const ddx = pos.x - zeroPos.x, ddz = pos.z - zeroPos.z;
+        if (ddx * ddx + ddz * ddz > 0.01) zeroYaw += (Math.atan2(ddx, ddz) - zeroYaw) * Math.min(1, dt / 180);
       } else {
         bench.visible = false;
       }
@@ -1281,13 +1290,13 @@ function buildPals() {
         R.armL.rotation.x = (-1.05 + tapL) * sitH + R.armL.rotation.x * (1 - sitH);
         R.armR.rotation.x = (-1.05 + tapR) * sitH + R.armR.rotation.x * (1 - sitH);
 
-        // ZeroBot nằm nghỉ cạnh bàn
-        D.legFL.rotation.x = 1.35 * sitH;
-        D.legFR.rotation.x = 1.35 * sitH;
-        D.legBL.rotation.x = -0.5 * sitH;
-        D.legBR.rotation.x = -0.5 * sitH;
-        dog.position.y -= 0.04 * sitH;
-        D.tail.rotation.z = Math.sin(now / 220) * 0.35;
+        // ZeroBot ngồi nghỉ cạnh bàn
+        D.legL.rotation.x = -1.3 * sitH;
+        D.legR.rotation.x = -1.3 * sitH;
+        const tapZL = Math.sin(now * 0.02 + 0.7) * 0.08;
+        const tapZR = Math.sin(now * 0.02 + 0.7 + Math.PI) * 0.08;
+        D.armL.rotation.x = (-0.8 + tapZL) * sitH + D.armL.rotation.x * (1 - sitH);
+        D.armR.rotation.x = (-0.8 + tapZR) * sitH + D.armR.rotation.x * (1 - sitH);
       } else {
         deskHermes.visible = false;
       }
@@ -1322,17 +1331,17 @@ function buildPals() {
       }
 
       robotLabel.position.set(pos.x, pos.y + (resting ? 1.35 : (hermesWorkProgress > 0.5 ? 1.5 : 1.85)), pos.z);
-      dogLabel.position.set(dogPos.x, dogPos.y + (resting ? 1.1 : (hermesWorkProgress > 0.5 ? 1.1 : 1.45)), dogPos.z);
+      zeroLabel.position.set(zeroPos.x, zeroPos.y + (resting ? 1.25 : (hermesWorkProgress > 0.5 ? 1.2 : 1.55)), zeroPos.z);
 
       /* ---- bong bóng nói ---- */
       if (now < sayUntil) {
         sayBubble.position.set(pos.x, pos.y + (sayBubble.userData.h || 1) + (resting ? 1.5 : 2.05), pos.z);
         sayBubble.visible = true;
       } else sayBubble.visible = false;
-      if (now < dogSayUntil) {
-        dogBubble.position.set(dogPos.x, dogPos.y + (dogBubble.userData.h || 1) + 1.55, dogPos.z);
-        dogBubble.visible = true;
-      } else dogBubble.visible = false;
+      if (now < zeroSayUntil) {
+        zeroBubble.position.set(zeroPos.x, zeroPos.y + (zeroBubble.userData.h || 1) + 1.55, zeroPos.z);
+        zeroBubble.visible = true;
+      } else zeroBubble.visible = false;
     }
   };
 }
