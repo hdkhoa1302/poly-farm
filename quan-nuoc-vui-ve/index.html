@@ -24,7 +24,7 @@ function fmt(n){return n.toLocaleString('vi-VN')}
 function hud(){$('coins',coins);$('score',score);$('served',served);$('day',day);var c=document.getElementById('clock');c.textContent=left;c.classList.toggle('hot',left<=20)}
 function $(id,v){document.getElementById(id).textContent=fmt(v)}
 function pickDish(){var pool=MENU.slice(0,unlocked);return pool[Math.floor(Math.random()*pool.length)]}
-function spawn(force){if(!playing)return;var open=custEl.children.length;
+function spawn(force){if(!playing)return;var open=custEl.querySelectorAll('.c:not(.done)').length;
   var cap=Math.min(MAXC,2+seatBonus+Math.floor((DUR-left)/60));
   if(open>=cap)return;
   var d=pickDish(),pat=Math.max(12,PAT0-Math.floor((DUR-left)/45)*4);
@@ -44,7 +44,7 @@ function tick(div){var bar=div.querySelector('.pat i');var iv=setInterval(functi
   div.classList.toggle('low',p<=8);
   if(p<=0){clearInterval(iv);div.remove();if(playing){status.textContent='Khách bỏ đi rồi 😤';}}
 },1000)}
-function serve(dishId){if(!playing)return;var list=custEl.querySelectorAll('.c');
+function serve(dishId){if(!playing)return;var list=custEl.querySelectorAll('.c:not(.done)');
   for(var i=0;i<list.length;i++){if(list[i].dataset.dish===dishId){
     var d=MENU.filter(function(m){return m.id===dishId})[0];
     var p=Number(list[i].dataset.pat),mx=Number(list[i].dataset.max);
@@ -76,7 +76,7 @@ function renderUps(){upsEl.innerHTML='';UPS.forEach(function(u){
   upsEl.appendChild(b);
 })}
 function endGame(){playing=false;clearInterval(timer);startBtn.disabled=false;startBtn.textContent='CHƠI LẠI';
-  day=0;custEl.innerHTML='';
+  custEl.innerHTML='';
   if(score>best){best=score;lb.submit(best).then(function(){GamesHub.renderLeaderboard(document.getElementById('leaderboard'),'quan-nuoc-vui-ve')})}
   status.textContent='Hết giờ! Điểm '+fmt(score)+' · phục vụ '+served+' khách 🎊';
   renderMenu();renderUps();
