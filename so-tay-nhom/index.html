@@ -213,7 +213,7 @@
 /* ============================================================
  * Sổ Tay Nhóm — tóm tắt hội thoại nhóm, chỉ thành viên xem được
  * ------------------------------------------------------------
- * Dữ liệu: cron của Hermes tóm tắt mỗi 50 tin nhắn rồi đẩy lên
+ * Dữ liệu: cron của Hermes tóm tắt mỗi 200 tin nhắn rồi đẩy lên
  * Worker (worker/src/index.js). App KHÔNG nói trực tiếp với
  * Firestore nữa → không còn API key nào trong repo.
  *
@@ -570,7 +570,7 @@ async function loadFirst() {
     $('vTime').classList.toggle('on', view === 'timeline');
     $('listLabel').hidden = true;
     $('empty').hidden = false;
-    $('empty').textContent = 'Chưa có kỳ tóm tắt nào. Sổ tự ghi khi nhóm tích đủ 50 tin, hoặc bấm "Lấy ngay" ở trên.';
+    $('empty').textContent = 'Chưa có kỳ tóm tắt nào. Sổ tự ghi khi nhóm tích đủ 200 tin, hoặc bấm "Lấy ngay" ở trên.';
     $('more').hidden = true;
     $('status').textContent = 'Cập nhật · ' + nowHm2;
     return;

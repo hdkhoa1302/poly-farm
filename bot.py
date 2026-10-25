@@ -10,8 +10,10 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
 HUB_URL = "https://hdkhoa1302.github.io/poly-farm/"
 APPS = [
-    {"name": "Poly Farm", "icon": "🌾", "short": "polyfarm",
-     "url": "https://hdkhoa1302.github.io/poly-farm/poly-farm/"},
+    {"name": "Sổ Tay Nhóm", "icon": "📖", "short": "sotaynhom",
+     "url": "https://hdkhoa1302.github.io/poly-farm/so-tay-nhom/"},
+    {"name": "Thế Giới Của Ae", "icon": "🧱", "short": "thegioi",
+     "url": "https://hdkhoa1302.github.io/poly-farm/the-gioi/"},
 ]
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
