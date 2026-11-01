@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ECC — Hướng dẫn dùng</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="../shared/icons.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#08090a; --panel:#0f1011; --surface:#191a1b; --surface-hi:#28282c;
+    --text:#f7f8f8; --body:#d0d6e0; --muted:#8a8f98; --faint:#62666d;
+    --border:rgba(255,255,255,.09); --border-subtle:rgba(255,255,255,.06); --border-hair:rgba(255,255,255,.04);
+    --accent:#5e6ad2; --accent-hi:#828fff; --ok:#27a644; --warn:#e5a00d; --danger:#eb5757;
+    --r-md:8px; --r-lg:12px; --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  html[data-theme="light"]{
+    --bg:#ffffff; --panel:#fafafa; --surface:#f4f4f5; --surface-hi:#e8e8ea;
+    --text:#08090a; --body:#3c4149; --muted:#5f6675; --faint:#8a8f98;
+    --border:rgba(0,0,0,.12); --border-subtle:rgba(0,0,0,.08); --border-hair:rgba(0,0,0,.05);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  body{
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100dvh; display:flex; justify-content:center;
+    letter-spacing:-.011em;
+  }
+  .shell{width:100%;max-width:600px;padding:calc(16px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:18px;min-width:0}
+
+  /* top */
+  .top{display:flex;align-items:center;gap:11px;min-width:0}
+  .back{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:9px;border:1px solid var(--border-subtle);
+        background:rgba(127,127,127,.07);color:var(--body);cursor:pointer;text-decoration:none}
+  .back svg{width:16px;height:16px;display:block}
+  .mark{width:34px;height:34px;flex:none;border-radius:10px;background:linear-gradient(160deg,var(--accent),#4a52a8);
+        display:grid;place-items:center;color:#fff;box-shadow:0 4px 14px rgba(94,106,210,.3)}
+  .mark svg{width:17px;height:17px;display:block}
+  .brand{min-width:0}
+  .brand h1{font-size:15.5px;font-weight:500;letter-spacing:-.02em;line-height:1.2}
+  .brand p{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.3}
+
+  /* search */
+  .search{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:var(--r-lg);
+          border:1px solid var(--border-subtle);background:rgba(127,127,127,.05)}
+  .search svg{width:15px;height:15px;color:var(--faint);flex:none}
+  .search input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);font:inherit;font-size:13.5px}
+  .search input::placeholder{color:var(--faint)}
+  .search .clear{width:20px;height:20px;display:grid;place-items:center;border:0;background:rgba(127,127,127,.14);
+                 border-radius:50%;color:var(--muted);cursor:pointer}
+  .search .clear svg{width:11px;height:11px}
+
+  /* chips nav */
+  .nav{display:flex;gap:7px;overflow-x:auto;padding:2px 1px 4px;scrollbar-width:none;position:sticky;top:0;z-index:6;
+       background:linear-gradient(var(--bg) 72%,transparent);margin:0 -16px;padding-left:16px;padding-right:16px}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{flex:none;font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 11px;border-radius:999px;
+         border:1px solid var(--border-subtle);background:rgba(127,127,127,.05)}
+  .nav a:hover{color:var(--text);border-color:var(--border)}
+
+  /* section */
+  section{display:flex;flex-direction:column;gap:10px;scroll-margin-top:56px}
+  .sec-head{display:flex;align-items:baseline;gap:8px;justify-content:space-between}
+  .sec-head h2{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .sec-head span{font-size:11.5px;color:var(--faint)}
+
+  /* hero */
+  .hero{border:1px solid var(--border-subtle);border-radius:var(--r-lg);padding:16px;background:
+        radial-gradient(120% 120% at 0% 0%,rgba(94,106,210,.16),transparent 60%),rgba(127,127,127,.04)}
+  .hero h3{font-size:17px;font-weight:600;letter-spacing:-.02em;line-height:1.3}
+  .hero p{font-size:13px;color:var(--body);margin-top:6px;line-height:1.5}
+  .hero .chain{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .chain b{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:var(--accent-hi);
+           background:rgba(94,106,210,.13);border:1px solid rgba(94,106,210,.28);padding:5px 9px;border-radius:7px}
+  .chain svg{width:13px;height:13px;color:var(--faint)}
+
+  /* cards */
+  .card{border:1px solid var(--border-subtle);border-radius:var(--r-lg);background:var(--panel);overflow:hidden}
+  .card:hover{border-color:var(--border)}
+  .card-h{display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;user-select:none}
+  .card-h .ic{width:28px;height:28px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--accent-hi);
+              background:rgba(94,106,210,.11);border:1px solid rgba(94,106,210,.2)}
+  .card-h .ic svg{width:14px;height:14px;display:block}
+  .card-h h3{font-size:13.5px;font-weight:500;line-height:1.3;flex:1;min-width:0}
+  .card-h .meta{font-size:11.5px;color:var(--faint);flex:none}
+  .card-b{padding:0 14px 14px;display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--body);line-height:1.55}
+  .steps{display:flex;flex-direction:column;gap:7px}
+  .step{display:flex;gap:9px;align-items:flex-start}
+  .step .n{width:18px;height:18px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:600;
+           background:rgba(94,106,210,.14);color:var(--accent-hi);border:1px solid rgba(94,106,210,.24);margin-top:1px}
+  .step .t{flex:1;min-width:0}
+  .cmd{display:inline-flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:12px;
+       color:var(--text);background:var(--surface);border:1px solid var(--border-subtle);padding:2px 7px;border-radius:6px;cursor:pointer}
+  .cmd:hover{background:var(--surface-hi)}
+  .cmd:active{transform:scale(.98)}
+  .stop{font-size:12.5px;color:var(--warn);display:flex;gap:6px;align-items:center;margin-top:2px}
+  .stop svg{width:13px;height:13px;flex:none}
+
+  /* grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}
+  .uc{border:1px solid var(--border-subtle);border-radius:var(--r-md);padding:11px 12px;background:var(--panel);cursor:pointer}
+  .uc:hover{border-color:var(--border);background:rgba(127,127,127,.05)}
+  .uc h4{font-size:12.5px;font-weight:500;line-height:1.35;display:flex;gap:7px;align-items:center}
+  .uc h4 svg{width:13px;height:13px;color:var(--accent-hi);flex:none}
+  .uc p{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.45}
+  .uc .cmds{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+
+  /* command table */
+  .list{border:1px solid var(--border-subtle);border-radius:var(--r-lg);overflow:hidden;background:var(--panel)}
+  .row{display:flex;gap:11px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--border-hair)}
+  .row:last-child{border-bottom:0}
+  .row .name{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--accent-hi);flex:none;min-width:104px}
+  .row .desc{font-size:12.5px;color:var(--body);flex:1;min-width:0;line-height:1.4}
+  .row .tag{font-size:10.5px;color:var(--faint);flex:none;padding:2px 6px;border-radius:5px;background:rgba(127,127,127,.07)}
+
+  /* accordion */
+  details.acc{border:1px solid var(--border-subtle);border-radius:var(--r-md);background:var(--panel)}
+  details.acc summary{padding:11px 13px;font-size:12.5px;font-weight:500;cursor:pointer;list-style:none;display:flex;
+                      align-items:center;gap:8px}
+  details.acc summary::-webkit-details-marker{display:none}
+  details.acc summary svg{width:13px;height:13px;color:var(--faint);transition:transform .15s var(--ease)}
+  details.acc[open] summary svg{transform:rotate(90deg)}
+  details.acc .body{padding:0 13px 12px;font-size:12.5px;color:var(--body);line-height:1.6;display:flex;flex-direction:column;gap:6px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px}
+  .tags span{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--body);background:var(--surface);
+             border:1px solid var(--border-subtle);padding:2px 6px;border-radius:5px}
+
+  .empty{padding:22px;text-align:center;color:var(--faint);font-size:12.5px}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);background:var(--surface-hi);color:var(--text);
+         border:1px solid var(--border);padding:9px 14px;border-radius:999px;font-size:12.5px;opacity:0;pointer-events:none;
+         transition:all .18s var(--ease);z-index:30}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .foot{font-size:11.5px;color:var(--faint);text-align:center;line-height:1.6;margin-top:6px}
+  .foot a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="top">
+    <a class="back" href="../index.html" aria-label="Về Hub"><i data-icon="arrow-left"></i></a>
+    <div class="mark"><i data-icon="blocks"></i></div>
+    <div class="brand">
+      <h1>ECC — Claude Code gói sẵn</h1>
+      <p>33 lệnh · 13 agent · 50 skill</p>
+    </div>
+  </div>
+
+  <div class="search">
+    <i data-icon="search"></i>
+    <input id="q" type="search" placeholder="Tìm lệnh, agent, tình huống…" autocomplete="off">
+    <button class="clear" id="clear" hidden aria-label="Xoá"><i data-icon="x"></i></button>
+  </div>
+
+  <div class="hero">
+    <h3>Nếu chỉ nhớ ba thứ</h3>
+    <p>Trước khi sửa code thì lập kế hoạch. Viết test trước khi viết code. Review trước khi merge. Ba lệnh dưới là 80% công việc.</p>
+    <div class="chain">
+      <b data-copy="/plan">/plan</b><i data-icon="arrow-right"></i>
+      <b data-copy="/tdd">/tdd</b><i data-icon="arrow-right"></i>
+      <b data-copy="/code-review">/code-review</b>
+    </div>
+  </div>
+
+  <div class="nav" id="nav">
+    <a href="#start">Bắt đầu</a>
+    <a href="#flows">Luồng</a>
+    <a href="#usecases">Tình huống</a>
+    <a href="#commands">Lệnh</a>
+    <a href="#agents">Agent</a>
+    <a href="#skills">Skill</a>
+    <a href="#config">Cấu hình</a>
+  </div>
+
+  <section id="start">
+    <div class="sec-head"><h2>Bắt đầu</h2><span>3 bước</span></div>
+    <div class="card">
+      <div class="card-b" style="padding-top:13px">
+        <div class="steps">
+          <div class="step"><div class="n">1</div><div class="t">Cài plugin trong Claude Code<br>
+            <span class="cmd" data-copy="/plugin marketplace add affaan-m/everything-claude-code">/plugin marketplace add</span>
+            <span class="cmd" data-copy="/plugin install everything-claude-code@everything-claude-code">/plugin install</span></div></div>
+          <div class="step"><div class="n">2</div><div class="t">Cài rules theo ngôn ngữ, plugin không tự cài hộ<br>
+            <span class="cmd" data-copy="./install.sh typescript">./install.sh typescript</span>
+            <span class="cmd" data-copy="./install.sh python golang">./install.sh python golang</span></div></div>
+          <div class="step"><div class="n">3</div><div class="t">Thử một lệnh để chắc nó sống<br>
+            <span class="cmd" data-copy='/plan "Thêm đăng nhập OAuth"'>/plan "…"</span></div></div>
+        </div>
+        <div class="stop"><i data-icon="zap"></i>Quên cài rules là các skill chạy mà không có chuẩn chung của dự án.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="flows">
+    <div class="sec-head"><h2>Luồng hay dùng</h2><span id="flows-count"></span></div>
+    <div id="flows-list" style="display:flex;flex-direction:column;gap:9px"></div>
+  </section>
+
+  <section id="usecases">
+    <div class="sec-head"><h2>Theo tình huống</h2><span>chọn theo việc đang làm</span></div>
+    <div class="grid" id="uc-grid"></div>
+  </section>
+
+  <section id="commands">
+    <div class="sec-head"><h2>Tra lệnh</h2><span id="cmd-count"></span></div>
+    <div class="list" id="cmd-list"></div>
+  </section>
+
+  <section id="agents">
+    <div class="sec-head"><h2>Agent</h2><span>giao việc, không tự làm hết</span></div>
+    <div class="list" id="agent-list"></div>
+  </section>
+
+  <section id="skills">
+    <div class="sec-head"><h2>Skill</h2><span>kiến thức nạp theo chủ đề</span></div>
+    <div id="skill-groups" style="display:flex;flex-direction:column;gap:8px"></div>
+  </section>
+
+  <section id="config">
+    <div class="sec-head"><h2>Cấu hình</h2><span>hook, MCP, rules</span></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <details class="acc"><summary><i data-icon="chevron-right"></i>Hook tự chạy 6 thời điểm</summary>
+        <div class="body">
+          <div><b>PreToolUse</b> chặn hoặc cảnh báo trước khi tool chạy: chặn <span class="cmd" data-copy="npm run dev">npm run dev</span> ngoài tmux, nhắc review trước khi push, cảnh báo file .md lạ.</div>
+          <div><b>PostToolUse</b> soi kết quả sau khi tool chạy, không chặn được.</div>
+          <div><b>Stop</b> chạy sau mỗi câu trả lời. <b>PreCompact</b> lưu state trước khi nén context.</div>
+          <div><b>SessionStart / SessionEnd</b> nạp và dọn ngữ cảnh đầu cuối phiên.</div>
+        </div>
+      </details>
+      <details class="acc"><summary><i data-icon="chevron-right"></i>15 MCP server dựng sẵn</summary>
+        <div class="body">
+          <div class="tags"><span>github</span><span>firecrawl</span><span>supabase</span><span>memory</span><span>sequential-thinking</span><span>vercel</span><span>railway</span><span>cloudflare-docs</span><span>cloudflare-workers-builds</span><span>cloudflare-workers-bindings</span><span>cloudflare-observability</span><span>clickhouse</span><span>context7</span><span>magic</span><span>filesystem</span></div>
+          <div>File mẫu ở <span class="cmd" data-copy="mcp-configs/mcp-servers.json">mcp-configs/mcp-servers.json</span>. Bật cái nào cần, đừng bật hết.</div>
+        </div>
+      </details>
+      <details class="acc"><summary><i data-icon="chevron-right"></i>Rules chia theo ngôn ngữ</summary>
+        <div class="body">
+          <div><b>common/</b> luôn cài. <b>typescript/</b>, <b>python/</b>, <b>golang/</b>, <b>swift/</b> cài theo dự án.</div>
+          <div>Cài bằng <span class="cmd" data-copy="./install.sh python">./install.sh python</span>, hoặc dùng skill <span class="cmd" data-copy="configure-ecc">configure-ecc</span> để được hỏi từng bước.</div>
+        </div>
+      </details>
+      <details class="acc"><summary><i data-icon="chevron-right"></i>Chạy nhiều service cùng lúc</summary>
+        <div class="body">
+          <div><span class="cmd" data-copy="/pm2">/pm2</span> dò frontend, backend, database rồi sinh cấu hình chạy nền.</div>
+          <div><span class="cmd" data-copy="/claw">/claw</span> mở REPL agent nhớ phiên cho việc dài hơi.</div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <div class="foot">
+    Nguồn: <a href="https://github.com/affaan-m/everything-claude-code" target="_blank" rel="noopener">affaan-m/everything-claude-code</a><br>
+    Chạm vào lệnh để copy.
+  </div>
+</div>
+
+<div class="toast" id="toast">Đã copy</div>
+
+<script>
+/* ---------- dữ liệu ---------- */
+const FLOWS = [
+  {
+    icon:'rocket', title:'Làm tính năng mới', meta:'4 bước',
+    steps:[
+      ['plan "mô tả tính năng"','Lập kế hoạch, nó dừng chờ bạn xác nhận'],
+      ['tdd','Viết test trước, code sau, coverage 80%+'],
+      ['code-review','Soi chất lượng và lỗ hổng ngay trên diff'],
+      ['verify','Build, type, lint, test theo thứ tự']
+    ],
+    stop:'Kế hoạch chưa được bạn duyệt thì đừng để nó sửa file.'
+  },
+  {
+    icon:'hammer', title:'Sửa bug', meta:'3 bước',
+    steps:[
+      ['tdd','Viết test tái hiện bug trước, đỏ đã rồi mới sửa'],
+      ['code-review','Bắt regression quanh chỗ vừa sửa'],
+      ['verify','Chắc không làm gãy chỗ khác']
+    ],
+    stop:'Sửa xong mà test vẫn đỏ là chưa xong, đừng báo hoàn thành.'
+  },
+  {
+    icon:'eye', title:'Review trước khi merge', meta:'3 bước',
+    steps:[
+      ['code-review','Chất lượng, bảo mật, khả năng bảo trì'],
+      ['code-review','Lần hai, chỉ soi bảo mật: auth, thanh toán, dữ liệu người dùng'],
+      ['python-review','Hoặc go-review nếu đúng ngôn ngữ đó']
+    ],
+    stop:'Review bằng lời của agent không thay cho việc bạn đọc diff.'
+  },
+  {
+    icon:'package', title:'Chuẩn bị release', meta:'4 bước',
+    steps:[
+      ['verify','Cổng đầu tiên, sai là dừng'],
+      ['test-coverage','Tìm chỗ thiếu test rồi sinh bù'],
+      ['e2e','Chạy luồng người dùng thật bằng Playwright'],
+      ['update-docs','Đồng bộ tài liệu và codemap']
+    ],
+    stop:'E2E đỏ vì môi trường thì ghi rõ, đừng sửa test cho xanh.'
+  },
+  {
+    icon:'trash-2', title:'Dọn code chết', meta:'2 bước',
+    steps:[
+      ['refactor-clean','Xoá theo từng cụm nhỏ, test lại sau mỗi lần'],
+      ['code-review','Soi lần cuối trước khi commit']
+    ],
+    stop:'Xoá một lần cả trăm dòng rồi mới chạy test là cách chắc chắn phải revert.'
+  },
+  {
+    icon:'brain', title:'Học từ phiên vừa làm', meta:'3 bước',
+    steps:[
+      ['learn-eval','Rút pattern, tự chấm điểm rồi mới lưu'],
+      ['instinct-status','Xem đã học được gì, độ tin bao nhiêu'],
+      ['evolve','Gom các instinct lẻ thành skill dùng lại được']
+    ],
+    stop:'Lưu pattern sai còn tệ hơn không lưu, vì lần sau nó tự tin áp dụng.'
+  },
+  {
+    icon:'users', title:'Việc lớn nhiều service', meta:'3 bước',
+    steps:[
+      ['multi-plan','Lập kế hoạch chéo nhiều model'],
+      ['multi-execute','Thực thi: backend đẩy Codex, frontend đẩy Gemini'],
+      ['orchestrate','Chuỗi planner → tdd → review → security tự động']
+    ],
+    stop:'Càng nhiều model càng dễ lệch hợp đồng API, chốt schema trước.'
+  }
+];
+
+const USECASES = [
+  { icon:'terminal', title:'Backend Go', text:'Test bảng trước, sửa build, review idiom', cmds:['go-test','go-build','go-review'] },
+  { icon:'flask-conical', title:'Python / Django', text:'PEP 8, type hint, bảo mật Django', cmds:['python-review','tdd','verify'] },
+  { icon:'layers', title:'Frontend React / Next', text:'Pattern component, test và e2e', cmds:['tdd','e2e','code-review'] },
+  { icon:'blocks', title:'Java Spring Boot', text:'Skill springboot cho pattern và bảo mật', cmds:['tdd','code-review','verify'] },
+  { icon:'git-branch', title:'Database', text:'Query, schema, migration, index', cmds:['plan','code-review'] },
+  { icon:'shield-check', title:'Bảo mật', text:'Nạp skill security-scan rồi review theo OWASP', cmds:['code-review'] },
+  { icon:'bot', title:'Làm cùng nhiều model', text:'Codex backend, Gemini frontend', cmds:['multi-plan','multi-execute'] },
+  { icon:'route', title:'Nhiều service chạy nền', text:'Dựng cấu hình pm2, xem log', cmds:['pm2','claw'] }
+];
+
+const COMMANDS = [
+  {n:'plan', d:'Lập kế hoạch trước khi sửa code, chờ bạn xác nhận', g:'Lõi'},
+  {n:'tdd', d:'Viết test trước rồi mới code, ép coverage 80%+', g:'Lõi'},
+  {n:'code-review', d:'Review chất lượng, bảo mật, khả năng bảo trì', g:'Lõi'},
+  {n:'verify', d:'Build, type, lint, test, dừng ở lỗi đầu tiên', g:'Lõi'},
+  {n:'build-fix', d:'Sửa lỗi build và type theo kiểu tối thiểu', g:'Lõi'},
+  {n:'test-coverage', d:'Tìm chỗ thiếu test và sinh test bù', g:'Lõi'},
+  {n:'e2e', d:'Sinh và chạy test Playwright, chụp ảnh, quay video', g:'Lõi'},
+  {n:'refactor-clean', d:'Xoá code chết, test lại sau mỗi cụm', g:'Lõi'},
+  {n:'update-docs', d:'Đồng bộ tài liệu với code hiện tại', g:'Tài liệu'},
+  {n:'update-codemaps', d:'Sinh codemap kiến trúc, đỡ tốn token đọc file', g:'Tài liệu'},
+  {n:'checkpoint', d:'Tạo hoặc kiểm mốc quay lại bằng git', g:'Phiên'},
+  {n:'sessions', d:'Xem, nạp lại, đặt tên phiên làm việc', g:'Phiên'},
+  {n:'eval', d:'Định nghĩa và chạy eval cho tính năng', g:'Eval'},
+  {n:'learn', d:'Rút pattern từ phiên vừa làm', g:'Học'},
+  {n:'learn-eval', d:'Rút pattern, tự chấm điểm rồi mới lưu', g:'Học'},
+  {n:'skill-create', d:'Sinh SKILL.md từ lịch sử git của repo', g:'Học'},
+  {n:'evolve', d:'Gom instinct lẻ thành skill, command, agent', g:'Học'},
+  {n:'instinct-status', d:'Xem instinct đã học và độ tin của từng cái', g:'Học'},
+  {n:'instinct-export', d:'Xuất instinct chia cho đồng đội', g:'Học'},
+  {n:'instinct-import', d:'Nhập instinct từ người khác', g:'Học'},
+  {n:'orchestrate', d:'Chuỗi agent: planner → tdd → review → security', g:'Đa model'},
+  {n:'multi-plan', d:'Lập kế hoạch chéo nhiều model', g:'Đa model'},
+  {n:'multi-execute', d:'Thực thi phối hợp nhiều model', g:'Đa model'},
+  {n:'multi-workflow', d:'6 pha từ research tới review, có cổng chất lượng', g:'Đa model'},
+  {n:'multi-backend', d:'Nhánh backend, đẩy việc cho Codex', g:'Đa model'},
+  {n:'multi-frontend', d:'Nhánh frontend, đẩy việc cho Gemini', g:'Đa model'},
+  {n:'pm2', d:'Dò service và dựng cấu hình chạy nền', g:'Vận hành'},
+  {n:'claw', d:'REPL agent nhớ phiên cho việc dài hơi', g:'Vận hành'},
+  {n:'setup-pm', d:'Chọn npm, pnpm, yarn hay bun cho repo', g:'Vận hành'},
+  {n:'go-test', d:'TDD cho Go, test table-driven', g:'Ngôn ngữ'},
+  {n:'go-build', d:'Sửa lỗi build, vet, lint của Go', g:'Ngôn ngữ'},
+  {n:'go-review', d:'Review Go: idiom, concurrency, xử lý lỗi', g:'Ngôn ngữ'},
+  {n:'python-review', d:'Review Python: PEP 8, type hint, bảo mật', g:'Ngôn ngữ'}
+];
+
+const AGENTS = [
+  {n:'planner', d:'Chia việc lớn thành bước, dùng trước khi đụng code'},
+  {n:'tdd-guide', d:'Ép viết test trước, không cho code trước test'},
+  {n:'code-reviewer', d:'Review tổng quát sau khi viết xong'},
+  {n:'security-reviewer', d:'Soi lỗ hổng, chạm auth hay dữ liệu là gọi'},
+  {n:'architect', d:'Quyết định thiết kế hệ thống, đánh đổi kiến trúc'},
+  {n:'build-error-resolver', d:'Sửa lỗi build và type, sửa tối thiểu'},
+  {n:'e2e-runner', d:'Chạy Playwright, quay video, chụp trace'},
+  {n:'refactor-cleaner', d:'Dọn code chết và trùng lặp'},
+  {n:'doc-updater', d:'Cập nhật tài liệu và codemap'},
+  {n:'database-reviewer', d:'Query, schema, index cho Postgres'},
+  {n:'go-reviewer', d:'Review chuyên sâu cho Go'},
+  {n:'go-build-resolver', d:'Sửa build, vet, lint cho Go'},
+  {n:'python-reviewer', d:'Review chuyên sâu cho Python'}
+];
+
+const SKILLS = [
+  {t:'Nền tảng', items:['coding-standards','api-design','backend-patterns','frontend-patterns','deployment-patterns','docker-patterns','database-migrations']},
+  {t:'Go', items:['golang-patterns','golang-testing']},
+  {t:'Python', items:['python-patterns','python-testing','django-patterns','django-security','django-tdd','django-verification']},
+  {t:'Java / Spring', items:['java-coding-standards','jpa-patterns','springboot-patterns','springboot-security','springboot-tdd','springboot-verification']},
+  {t:'C++', items:['cpp-coding-standards','cpp-testing']},
+  {t:'Dữ liệu', items:['postgres-patterns','clickhouse-io']},
+  {t:'Test và kiểm chứng', items:['tdd-workflow','e2e-testing','verification-loop','eval-harness']},
+  {t:'Bảo mật', items:['security-review','security-scan']},
+  {t:'Tự học và context', items:['continuous-learning','continuous-learning-v2','strategic-compact','iterative-retrieval','skill-stocktake']},
+  {t:'Khác', items:['configure-ecc','search-first','regex-vs-llm-structured-text','content-hash-cache-pattern','cost-aware-llm-pipeline','nutrient-document-processing','foundation-models-on-device','liquid-glass-design','project-guidelines-example']}
+];
+
+/* ---------- render ---------- */
+const el = (h) => { const d = document.createElement('div'); d.innerHTML = h.trim(); return d.firstElementChild; };
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const chip = (cmd) => `<span class="cmd" data-copy="${esc(cmd)}">/${esc(cmd)}</span>`;
+
+function renderFlows(filter='') {
+  const box = document.getElementById('flows-list');
+  box.innerHTML = '';
+  const q = filter.toLowerCase();
+  const rows = FLOWS.filter(f => !q || (f.title + ' ' + f.steps.map(s => s.join(' ')).join(' ')).toLowerCase().includes(q));
+  rows.forEach((f, i) => {
+    const card = el(`<details class="card acc" ${q ? 'open' : (i === 0 ? 'open' : '')}>
+      <summary class="card-h"><div class="ic"><i data-icon="${f.icon}"></i></div>
+        <h3>${esc(f.title)}</h3><span class="meta">${esc(f.meta)}</span><i data-icon="chevron-right"></i></summary>
+      <div class="card-b"><div class="steps">
+        ${f.steps.map((s, k) => `<div class="step"><div class="n">${k+1}</div><div class="t">${chip(s[0])}<br><span style="color:var(--muted);font-size:12px">${esc(s[1])}</span></div></div>`).join('')}
+      </div><div class="stop"><i data-icon="zap"></i>${esc(f.stop)}</div></div>
+    </details>`);
+    box.appendChild(card);
+  });
+  document.getElementById('flows-count').textContent = rows.length + ' luồng';
+}
+
+function renderUseCases(filter='') {
+  const box = document.getElementById('uc-grid');
+  box.innerHTML = '';
+  const q = filter.toLowerCase();
+  USECASES.filter(u => !q || (u.title + ' ' + u.text + ' ' + u.cmds.join(' ')).toLowerCase().includes(q)).forEach(u => {
+    box.appendChild(el(`<div class="uc"><h4><i data-icon="${u.icon}"></i>${esc(u.title)}</h4>
+      <p>${esc(u.text)}</p><div class="cmds">${u.cmds.map(chip).join('')}</div></div>`));
+  });
+}
+
+function renderCommands(filter='') {
+  const box = document.getElementById('cmd-list');
+  box.innerHTML = '';
+  const q = filter.toLowerCase();
+  const rows = COMMANDS.filter(c => !q || (c.n + ' ' + c.d + ' ' + c.g).toLowerCase().includes(q));
+  rows.forEach(c => box.appendChild(el(`<div class="row"><span class="name">/${esc(c.n)}</span>
+    <span class="desc">${esc(c.d)}</span><span class="tag">${esc(c.g)}</span></div>`)));
+  document.getElementById('cmd-count').textContent = rows.length + '/' + COMMANDS.length + ' lệnh';
+  if (!rows.length) box.appendChild(el('<div class="empty">Không có lệnh khớp.</div>'));
+}
+
+function renderAgents(filter='') {
+  const box = document.getElementById('agent-list');
+  box.innerHTML = '';
+  const q = filter.toLowerCase();
+  AGENTS.filter(a => !q || (a.n + ' ' + a.d).toLowerCase().includes(q)).forEach(a => {
+    box.appendChild(el(`<div class="row"><span class="name">${esc(a.n)}</span><span class="desc">${esc(a.d)}</span></div>`));
+  });
+}
+
+function renderSkills(filter='') {
+  const box = document.getElementById('skill-groups');
+  box.innerHTML = '';
+  const q = filter.toLowerCase();
+  SKILLS.forEach(g => {
+    const items = g.items.filter(i => !q || i.includes(q) || g.t.toLowerCase().includes(q));
+    if (!items.length) return;
+    const d = el(`<details class="acc"><summary><i data-icon="chevron-right"></i>${esc(g.t)} <span style="color:var(--faint);font-weight:400">· ${items.length}</span></summary>
+      <div class="body"><div class="tags">${items.map(i => `<span>${esc(i)}</span>`).join('')}</div></div></details>`);
+    if (q) d.open = true;
+    box.appendChild(d);
+  });
+}
+
+/* ---------- search + copy ---------- */
+const qInput = document.getElementById('q');
+const clearBtn = document.getElementById('clear');
+function applyFilter() {
+  const q = qInput.value.trim();
+  clearBtn.hidden = !q;
+  renderFlows(q); renderUseCases(q); renderCommands(q); renderAgents(q); renderSkills(q);
+  if (window.Icons) Icons.hydrate(document.body);
+}
+qInput.addEventListener('input', applyFilter);
+clearBtn.addEventListener('click', () => { qInput.value = ''; applyFilter(); qInput.focus(); });
+
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 1400);
+}
+async function copyText(txt) {
+  try { await navigator.clipboard.writeText(txt); toast('Đã copy ' + txt); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta);
+    ta.select(); try { document.execCommand('copy'); toast('Đã copy ' + txt); } catch (_) { toast('Không copy được'); }
+    ta.remove();
+  }
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-copy]');
+  if (t) { e.preventDefault(); copyText(t.dataset.copy); }
+});
+
+/* ---------- init ---------- */
+renderFlows(); renderUseCases(); renderCommands(); renderAgents(); renderSkills();
+if (window.Icons) Icons.hydrate(document.body);
+if (window.Telegram && Telegram.WebApp) { try { Telegram.WebApp.ready(); Telegram.WebApp.expand(); } catch (e) {} }
+</script>
+</body>
+</html>
