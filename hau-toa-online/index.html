@@ -322,11 +322,16 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.1, -1.4);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
-controls.minDistance = 10;
-controls.maxDistance = 30;
-controls.maxPolarAngle = Math.PI * 0.49;
-controls.autoRotate = true;
-controls.autoRotateSpeed = 0.35;
+controls.minDistance = 12;
+controls.maxDistance = 26;
+controls.maxPolarAngle = Math.PI * 0.46;
+controls.minPolarAngle = Math.PI * 0.22;
+/* Khoá góc xoay: trước đây để auto xoay nên camera chui vào tường/cột, màn
+   hình đen xì, xem còn chóng mặt. Giờ chỉ xoay trong khoảng trước sân khấu. */
+controls.minAzimuthAngle = -0.55;
+controls.maxAzimuthAngle = 0.55;
+controls.autoRotate = false;
+controls.enablePan = false;
 controls.update();
 
 /* --- vật liệu dùng chung --- */
