@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Hầu Toà Online</title>
+<link rel="preconnect" href="https://telegram.org" crossorigin>
+<link rel="preconnect" href="https://games-hub-api.hdkhoa1302.workers.dev" crossorigin>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Bricolage+Grotesque:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0a08; --panel:rgba(20,15,11,.82); --line:rgba(255,225,180,.14);
+    --text:#f7efe2; --muted:#b9a992; --gold:#c9a227; --wine:#7a1f1f; --ok:#3fae74;
+    --r:14px; --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;letter-spacing:-.01em}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+
+  .hud{position:fixed;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+       display:flex;align-items:center;gap:9px;z-index:7;pointer-events:none}
+  .hud > *{pointer-events:auto}
+  .iconbtn{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:11px;
+       border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(10px);color:var(--text);
+       cursor:pointer;padding:0;transition:background .15s var(--ease),transform .1s var(--ease)}
+  .iconbtn:hover{background:rgba(48,36,24,.9)}
+  .iconbtn:active{transform:scale(.94)}
+  .iconbtn svg{width:17px;height:17px;display:block}
+  .iconbtn.tiny{width:28px;height:28px;border-radius:9px;margin-left:auto}
+  .iconbtn.tiny svg{width:15px;height:15px;transition:transform .18s var(--ease)}
+  .card.folded .iconbtn.tiny svg{transform:rotate(180deg)}
+  .card.folded #details{display:none}
+  .titles{flex:1;min-width:0;background:var(--panel);backdrop-filter:blur(10px);
+       border:1px solid var(--line);border-radius:var(--r);padding:7px 11px}
+  .titles b{display:block;font:600 13.5px 'Bricolage Grotesque',Inter,sans-serif;letter-spacing:.02em;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .titles span{display:block;font-size:11px;color:var(--muted);margin-top:2px;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---- bảng điều khiển dưới đáy ---- */
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:8;padding:0 10px calc(10px + env(safe-area-inset-bottom));
+       background:linear-gradient(to top,rgba(8,6,4,.94),rgba(8,6,4,.62) 55%,transparent)}
+  .card{max-width:560px;margin:0 auto;background:var(--panel);backdrop-filter:blur(14px);
+       border:1px solid var(--line);border-radius:18px;padding:13px 14px}
+  .row{display:flex;align-items:center;gap:8px}
+  .row.between{justify-content:space-between}
+  .phase{font:600 12px 'Bricolage Grotesque',Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+  .timer{font:600 12px ui-monospace,monospace;color:var(--muted)}
+  .charge{font-size:14px;line-height:1.45;margin-top:7px}
+  .charge b{color:var(--text)}
+  .charge .def{color:#ffd9a0}
+  .muted{color:var(--muted);font-size:12px}
+
+  label{display:block;font-size:11px;color:var(--muted);margin:9px 0 4px;letter-spacing:.04em;text-transform:uppercase}
+  input,textarea,select{width:100%;background:rgba(0,0,0,.34);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:9px 10px;font:inherit;font-size:13.5px;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:rgba(201,162,39,.7)}
+  textarea{resize:none;min-height:52px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{border:1px solid var(--line);background:rgba(0,0,0,.28);color:var(--muted);border-radius:999px;
+    padding:5px 10px;font:500 12px Inter,sans-serif;cursor:pointer}
+  .chip:active{transform:scale(.96)}
+  .chip.on{border-color:var(--gold);color:#ffe9b8;background:rgba(201,162,39,.16)}
+
+  .btn{width:100%;margin-top:11px;border:none;border-radius:12px;padding:12px;cursor:pointer;
+    font:600 14px 'Bricolage Grotesque',Inter,sans-serif;letter-spacing:.03em;
+    background:linear-gradient(180deg,#d8b545,#a8841c);color:#231a06;transition:transform .1s var(--ease),filter .15s}
+  .btn:active{transform:scale(.985);filter:brightness(1.06)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+
+  .voteRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
+  .vote{border-radius:12px;padding:11px 8px;border:1px solid var(--line);background:rgba(0,0,0,.32);
+    color:var(--text);font:600 13px Inter,sans-serif;cursor:pointer}
+  .vote.guilty{border-color:rgba(160,40,40,.55)}
+  .vote.guilty:hover{background:rgba(122,31,31,.32)}
+  .vote.acquit{border-color:rgba(60,140,100,.5)}
+  .vote.acquit:hover{background:rgba(40,110,80,.26)}
+  .vote:disabled{opacity:.45;cursor:default}
+
+  .tally{margin-top:10px}
+  .bar{height:9px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:5px}
+  .bar i{display:block;height:100%;width:0;transition:width .5s var(--ease)}
+  .bar.g i{background:linear-gradient(90deg,#8d2a2a,#c8433f)}
+  .bar.a i{background:linear-gradient(90deg,#2f7d5a,#4fbb8b)}
+  .tallyTop{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+
+  .verdict{margin-top:9px;border:1px solid rgba(201,162,39,.5);border-radius:12px;padding:11px;
+    background:rgba(201,162,39,.10);font-size:13.5px;line-height:1.5}
+  .verdict b{color:#ffe9b8}
+
+  .toast{position:fixed;left:50%;bottom:calc(52% );transform:translateX(-50%);z-index:20;
+    background:rgba(20,15,11,.95);border:1px solid var(--line);border-radius:12px;padding:9px 14px;
+    font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center}
+  .toast.on{opacity:1}
+
+  /* tuyên án: tấm niêm phong bung ra giữa màn hình */
+  .seal{position:fixed;inset:0;display:grid;place-items:center;z-index:15;pointer-events:none}
+  .sealCard{transform:scale(.86);opacity:0;transition:transform .5s var(--ease),opacity .4s;
+    border:2px solid var(--gold);border-radius:16px;padding:18px 22px;background:rgba(14,10,7,.92);
+    text-align:center;max-width:82vw}
+  .seal.on .sealCard{transform:scale(1);opacity:1}
+  .sealCard .k{font:600 11px Inter,sans-serif;letter-spacing:.28em;color:var(--muted);text-transform:uppercase}
+  .sealCard .v{font:700 26px 'Bricolage Grotesque',Inter,sans-serif;color:#ffe1a3;margin:8px 0 4px;letter-spacing:.02em}
+  .sealCard .s{font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="hud">
+  <button class="iconbtn" id="back" title="Về Hub" aria-label="Về Hub">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+  </button>
+  <div class="titles">
+    <b>Hầu Toà Online</b>
+    <span id="sub">Phòng xử án của nhóm</span>
+  </div>
+  <button class="iconbtn" id="share" title="Chia sẻ phiên" aria-label="Chia sẻ phiên">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 3.9M15.4 6.6 8.6 10.5"/></svg>
+  </button>
+</div>
+
+<div class="sheet">
+  <div class="card">
+    <!-- 1. Mở phiên -->
+    <div id="paneNew">
+      <div class="row between">
+        <span class="phase">Mở phiên mới</span>
+        <span class="muted" id="newHint">điền nhanh 3 dòng</span>
+      </div>
+      <label for="defendant">Bị cáo</label>
+      <input id="defendant" maxlength="28" placeholder="Tên đứa bị xử" autocomplete="off">
+      <div class="chips" id="defChips"></div>
+      <label for="charge">Tội danh</label>
+      <textarea id="charge" maxlength="140" placeholder="Ví dụ: tội mở miệng chê game của người khác mà không chơi"></textarea>
+      <label for="ev1">Chứng cứ 1 (chữ hoặc link)</label>
+      <input id="ev1" maxlength="120" placeholder="tin nhắn, ảnh, link..." autocomplete="off">
+      <label for="ev2">Chứng cứ 2 (không bắt buộc)</label>
+      <input id="ev2" maxlength="120" placeholder="thêm một cái cho nặng tội" autocomplete="off">
+      <button class="btn" id="openCase">Mở phiên toà</button>
+    </div>
+
+    <!-- 2. Theo dõi phiên -->
+    <div id="paneCase" hidden>
+      <div class="row between">
+        <span class="phase" id="phaseName">Khai mạc</span>
+        <span class="timer" id="phaseTimer">--:--</span>
+        <button class="iconbtn tiny" id="fold" aria-label="Thu gọn" title="Thu gọn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>
+        </button>
+      </div>
+      <div id="details">
+        <div class="charge" id="chargeLine"></div>
+        <div class="tally">
+          <div class="tallyTop"><span id="tG">Có tội · 0</span><span id="tA">Trắng án · 0</span></div>
+          <div class="bar g"><i id="barG"></i></div>
+          <div class="bar a"><i id="barA"></i></div>
+        </div>
+        <div class="verdict" id="verdictBox" hidden></div>
+        <button class="btn ghost" id="newFromCase">Mở phiên khác</button>
+      </div>
+      <div class="voteRow" id="voteRow">
+        <button class="vote guilty" id="voteGuilty">Có tội</button>
+        <button class="vote acquit" id="voteAcquit">Trắng án</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="seal" id="seal"><div class="sealCard">
+  <div class="k">Toà tuyên</div>
+  <div class="v" id="sealV">CÓ TỘI</div>
+  <div class="s" id="sealS"></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ------------------------------------------------------------------ hằng số */
+const WORKER = 'https://games-hub-api.hdkhoa1302.workers.dev';
+const MEMBERS = ['Khôi', 'Khoa', 'Khánh Duy', 'Anh Kiệt', 'Duy An', 'Ngọc Tú', 'Doko', 'Zero'];
+
+/* Mốc thời gian của phiên, tính bằng giây kể từ lúc mở.
+   Ai mở cùng link sẽ thấy đúng tiến trình này, không lệch. */
+const TL = { open: 0, prose: 9, prose2: 42, vote: 76, verdict: 140 };
+
+const tg = window.Telegram?.WebApp;
+if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/* ------------------------------------------------------------------ tiện ích */
+function hashStr(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function pick(rand, arr) { return arr[Math.floor(rand() * arr.length) % arr.length]; }
+function b64e(s) { return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64d(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(s))); }
+
+function toast(msg, ms = 2200) {
+  const el = $('toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('on'), ms);
+}
+
+/* Tên người chơi: Telegram trước, không có thì khách */
+function myName() {
+  const u = tg?.initDataUnsafe?.user;
+  if (u) return [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || 'Khách';
+  return 'Khách';
+}
+function myInitData() {
+  return (tg && tg.platform && tg.platform !== 'unknown' && tg.initData) || '';
+}
+
+/* ------------------------------------------------------------------ phiên toà */
+/* Mã phiên + dữ liệu vụ án nằm gọn trong hash của URL: mở link là thấy,
+   không cần server giữ trạng thái. */
+function makeCase({ defendant, charge, ev1, ev2, accuser }) {
+  const id = Math.random().toString(36).slice(2, 8).toLowerCase();
+  const data = {
+    i: id, d: defendant.trim().slice(0, 28), c: charge.trim().slice(0, 140),
+    e: [ev1.trim().slice(0, 120), ev2.trim().slice(0, 120)].filter(Boolean),
+    a: accuser, t: Date.now()
+  };
+  return data;
+}
+function encodeCase(c) { return b64e(JSON.stringify(c)); }
+function readCaseFromUrl() {
+  const h = location.hash.replace(/^#/, '');
+  if (!h.startsWith('v=')) return null;
+  try {
+    const c = JSON.parse(b64d(h.slice(2)));
+    if (!c || !c.i || !c.d || !c.c) return null;
+    return c;
+  } catch (e) { return null; }
+}
+function appIdOf(c) { return 'court-' + c.i; }
+
+/* ------------------------------------------------------------------ tranh tụng */
+/* Máy soạn lời công tố và bào chữa theo mẫu, gieo bằng mã phiên nên ai mở
+   cùng link cũng đọc đúng từng câu như nhau. */
+function argumentsFor(c) {
+  const r = mulberry(hashStr(c.i + c.d + c.c));
+  const ev = c.e.length ? c.e : ['không có gì ngoài lời khai'];
+  const e1 = ev[0], e2 = ev[1] || ev[0];
+
+  const pros = [
+    `Thưa hội đồng, bị cáo ${c.d} bị cáo buộc: ${c.c}.`,
+    `Chứng cứ thứ nhất: ${e1}. Đây không phải chuyện đùa, đây là chuyện đã xảy ra.`,
+    `Chứng cứ thứ hai: ${e2}. Hai chứng cứ, hai lần bị cáo không phủ nhận.`,
+    `Bị cáo không có mặt tại hiện trường vào lúc bị buộc tội, nhưng có mặt trong mọi cuộc tám chuyện.`,
+    `Nếu không xử, hội đồng tự hỏi: hôm nay tha một vụ, ngày mai lấy gì để hù.`,
+    `Đề nghị mức án nặng hơn một chút để làm gương, nhẹ hơn một chút để còn chơi chung.`,
+    pick(r, ['Công tố xin hết.', 'Công tố giữ nguyên quan điểm.', 'Hết phần buộc tội, thưa hội đồng.'])
+  ];
+  const def = [
+    `Thưa hội đồng, thân chủ tôi tên ${c.d}, và ${c.d} không phải người xấu, chỉ là người bị hiểu sai.`,
+    `${e1}? Đúng, nhưng nó thiếu ngữ cảnh. Ngữ cảnh là cả một buổi tối.`,
+    `${e2}? Càng thiếu. Người ta chỉ nhớ câu chốt, không ai nhớ câu dẫn.`,
+    `Nếu ${c.d} có tội, thì cả nhóm có tội, vì cả nhóm đã cười. Cười là đồng phạm.`,
+    `Bên công tố đề nghị mức án làm gương. Nhưng gương để soi, không phải để đập.`,
+    `Thân chủ tôi sẵn sàng nhận hình phạt nhẹ nhất mà hội đồng thấy vui.`,
+    pick(r, ['Bào chữa xin hết.', 'Bào chữa giữ nguyên quan điểm.', 'Hết phần gỡ tội, thưa hội đồng.'])
+  ];
+  return { pros, def };
+}
+
+function verdictPunishment(c, guiltyRatio) {
+  const r = mulberry(hashStr(c.i + 'v'));
+  const light = ['bị gọi đúng biệt danh một tuần', 'phải mở CƠ TIÊN đánh 3 ván', 'cấm rủ rê trong 2 ngày'];
+  const heavy = ['cấm xài Opus 3 ngày', 'phải viết CƠ TIÊN 10 lần', 'làm nô cho nhóm một buổi', 'phải xin lỗi bằng voice 30 giây'];
+  const pool = guiltyRatio >= 0.66 ? heavy : light;
+  return pick(r, pool);
+}
+
+/* ------------------------------------------------------------------ three.js */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14100b);
+scene.fog = new THREE.Fog(0x14100b, 32, 74);
+
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 8.6, 16.8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.48;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.1, -1.4);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 10;
+controls.maxDistance = 30;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.update();
+
+/* --- vật liệu dùng chung --- */
+const M = {
+  floor: new THREE.MeshStandardMaterial({ color: 0x5a4029, roughness: .9 }),
+  wood: new THREE.MeshStandardMaterial({ color: 0x7d5530, roughness: .7 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x3a2b1d, roughness: .85 }),
+  wall: new THREE.MeshStandardMaterial({ color: 0x3a2c20, roughness: .95 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xd8b44a, roughness: .35, metalness: .6 }),
+  wine: new THREE.MeshStandardMaterial({ color: 0x7d2626, roughness: .7 }),
+  cloth: new THREE.MeshStandardMaterial({ color: 0x3a2e22, roughness: .95 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0xe0bd97, roughness: .78 }),
+  bar: new THREE.MeshStandardMaterial({ color: 0xa2916f, roughness: .35, metalness: .7 })
+};
+
+const box = (w, h, d, mat, x, y, z, parent = scene) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z); m.castShadow = m.receiveShadow = true;
+  parent.add(m); return m;
+};
+
+/* --- phòng xử --- */
+const room = new THREE.Group(); scene.add(room);
+const W = 22, D = 20, H = 9;
+
+const floor = new THREE.Mesh(new THREE.BoxGeometry(W, .4, D), M.floor);
+floor.position.y = -.2; floor.receiveShadow = true; room.add(floor);
+
+/* sàn gỗ: một mặt phẳng, chỉ thêm tấm thảm trước bục cho có lớp */
+const carpet = new THREE.Mesh(new THREE.PlaneGeometry(9, 6),
+  new THREE.MeshStandardMaterial({ color: 0x5b1f1f, roughness: .96 }));
+carpet.rotation.x = -Math.PI / 2;
+carpet.position.set(0, .03, -1.2);
+carpet.receiveShadow = true;
+room.add(carpet);
+
+/* tường: ba mặt, chừa mặt trước cho camera */
+box(W, H, .5, M.wall, 0, H / 2, -D / 2, room);
+box(.5, H, D, M.wall, -W / 2, H / 2, 0, room);
+box(.5, H, D, M.wall, W / 2, H / 2, 0, room);
+
+/* ốp gỗ chân tường + phào chỉ vàng */
+box(W - .6, 1.6, .18, M.wood, 0, .8, -D / 2 + .34, room);
+box(W - .6, .1, .26, M.gold, 0, 1.64, -D / 2 + .34, room);
+
+/* trần: dầm ngang */
+for (let i = 0; i < 5; i++) box(W, .32, .4, M.wood, 0, H - .2, -D / 2 + 2 + i * 4, room);
+
+/* quốc huy giả: vòng tròn vàng trên vách */
+const emblem = new THREE.Group(); emblem.position.set(0, 5.4, -D / 2 + .32); room.add(emblem);
+const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5, .09, 8, 48), M.gold); emblem.add(ring);
+const disc = new THREE.Mesh(new THREE.CircleGeometry(1.4, 40), M.wine); disc.position.z = -.02; emblem.add(disc);
+for (let i = 0; i < 16; i++) {
+  const a = (i / 16) * Math.PI * 2;
+  const ray = new THREE.Mesh(new THREE.BoxGeometry(.07, .55, .05), M.gold);
+  ray.position.set(Math.cos(a) * 1.05, Math.sin(a) * 1.05, .02);
+  ray.rotation.z = a - Math.PI / 2; emblem.add(ray);
+}
+
+/* bục toà án */
+const bench = new THREE.Group(); bench.position.set(0, 0, -6.4); room.add(bench);
+box(9, 1.5, 2.2, M.wood, 0, .75, 0, bench);
+box(9.4, .18, 2.6, M.dark, 0, 1.56, 0, bench);
+box(9.4, .1, .14, M.gold, 0, 1.66, 1.28, bench);
+box(2.6, 1.1, .14, M.wine, 0, 2.2, -1.05, bench);
+
+/* ghế chánh án */
+function figure(parent, opts = {}) {
+  const g = new THREE.Group();
+  const robeMat = new THREE.MeshStandardMaterial({ color: opts.robe || 0x33333d, roughness: .9 });
+  const robe = new THREE.Mesh(new THREE.CylinderGeometry(.42, .62, 1.5, 8), robeMat);
+  robe.position.y = .75; robe.castShadow = true; g.add(robe);
+  /* tay: hai ống nhỏ, đủ để hình người không thành tấm ván */
+  [-1, 1].forEach((s) => {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(.09, .08, .95, 6), robeMat);
+    arm.position.set(s * .45, 1.15, 0); arm.rotation.z = s * .16;
+    arm.castShadow = true; g.add(arm);
+  });
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(.27, 1), M.skin);
+  head.position.y = 1.78; head.castShadow = true; g.add(head);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, .1, 8), M.dark);
+  cap.position.y = 2.02; g.add(cap);
+  if (opts.band) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(.29, .29, .09, 8), M.gold);
+    band.position.y = 1.95; g.add(band);
+  }
+  if (opts.card) {
+    const c = labelSprite(opts.card, opts.tint || '#f7efe2');
+    c.position.y = 2.55; c.scale.set(1.7, .42, 1); g.add(c);
+  }
+  parent.add(g);
+  return g;
+}
+
+function labelSprite(text, color = '#f7efe2') {
+  const pad = 28, fs = 44;
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  ctx.font = `600 ${fs}px Inter, sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  cv.width = w; cv.height = 86;
+  const c2 = cv.getContext('2d');
+  c2.fillStyle = 'rgba(10,8,6,.72)';
+  c2.beginPath(); c2.roundRect(0, 0, w, 86, 18); c2.fill();
+  c2.strokeStyle = 'rgba(201,162,39,.45)'; c2.lineWidth = 2; c2.stroke();
+  c2.font = `600 ${fs}px Inter, sans-serif`;
+  c2.fillStyle = color; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+  c2.fillText(text, w / 2, 45);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true }));
+  sp.scale.set(w / 86 * .42, .84, 1);
+  return sp;
+}
+
+/* biển tên gắn lên mặt bục, nhìn là biết ai đứng đâu, không cần chữ lơ lửng */
+function plaque(text, w = 1.9, h = .42, tint = '#f7efe2') {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 128;
+  const c = cv.getContext('2d');
+  c.fillStyle = 'rgba(12,9,6,.9)'; c.fillRect(0, 0, 512, 128);
+  c.strokeStyle = 'rgba(216,180,74,.7)'; c.lineWidth = 6; c.strokeRect(3, 3, 506, 122);
+  c.font = '600 62px Inter, sans-serif'; c.fillStyle = tint;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(text, 256, 68);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  return m;
+}
+
+const judge = figure(bench, { robe: 0x141419, band: true });
+judge.position.set(0, 1.65, -.2);
+judge.scale.setScalar(.92);
+const judgePlate = plaque('CHÁNH ÁN', 2.6, .52, '#ffe1a3');
+judgePlate.position.set(0, .92, 1.16); bench.add(judgePlate);
+
+/* búa */
+const gavel = new THREE.Group();
+const gh = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .9, 8), M.wood);
+gh.rotation.z = Math.PI / 2.6; gavel.add(gh);
+const gb = new THREE.Mesh(new THREE.BoxGeometry(.42, .26, .26), M.dark);
+gb.position.set(.36, .22, 0); gb.rotation.z = Math.PI / 2.6; gavel.add(gb);
+gavel.position.set(1.9, 1.95, .2); bench.add(gavel);
+
+/* vành đai bị cáo: lan can thấp để còn thấy người đứng bên trong */
+const dock = new THREE.Group(); dock.position.set(-3.6, 0, -.4); room.add(dock);
+box(3.2, .22, 3.2, M.dark, 0, .11, 0, dock);
+for (let i = 0; i < 4; i++) {
+  const s = i < 2 ? 1 : -1, ax = i % 2;
+  box(ax ? 3.2 : .1, 1.0, ax ? .1 : 3.2, M.wood, ax ? 0 : s * 1.6, .62, ax ? s * 1.6 : 0, dock);
+}
+box(3.2, .09, .12, M.gold, 0, 1.16, 1.6, dock);
+/* song sắt */
+for (let i = 0; i < 7; i++) {
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, 1.0, 6), M.bar);
+  b.position.set(-1.4 + i * .47, .72, 1.5); dock.add(b);
+}
+const accused = figure(dock, { robe: 0x2b2b33 });
+accused.position.set(0, .2, 0);
+accused.scale.setScalar(.95);
+const dockPlate = plaque('BỊ CÁO', 2.4, .5, '#ffd9a0');
+dockPlate.position.set(0, 1.3, 1.56); dock.add(dockPlate);
+
+/* hai bục tranh tụng */
+function podium(x, z, color, label) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); room.add(g);
+  box(2.4, 1.3, 1.5, M.wood, 0, .65, 0, g);
+  box(2.6, .12, 1.7, color, 0, 1.32, 0, g);
+  const f = figure(g, { robe: color === M.wine ? 0x6d2020 : 0x2b3a58 });
+  f.position.set(0, .12, -.95); f.scale.setScalar(.95);
+  const pl = plaque(label, 1.9, .42);
+  pl.position.set(0, .82, .77); g.add(pl);
+  return g;
+}
+const prosPodium = podium(-5.8, 3.0, M.wine, 'CÔNG TỐ');
+const defPodium = podium(5.8, 3.0, new THREE.MeshStandardMaterial({ color: 0x24304a, roughness: .8 }), 'BÀO CHỮA');
+
+/* bồi thẩm đoàn: dãy ghế bên phải */
+const jury = new THREE.Group(); jury.position.set(8.0, 0, -1.5); room.add(jury);
+for (let r = 0; r < 3; r++) {
+  box(2.2, .9, 3.4, M.wood, 0, .45, -2.2 + r * 2.2, jury);
+}
+for (let r = 0; r < 3; r++) for (let i = 0; i < 2; i++) {
+  const f = figure(jury, { robe: 0x2f2a22 });
+  f.position.set(-.4 + i * .9, .95, -2.6 + r * 2.2);
+  f.scale.setScalar(.62);
+}
+
+/* khán phòng: hai dãy người đứng dọc hai bên tường, không chắn tầm nhìn vào bục */
+const gallery = new THREE.Group(); gallery.position.set(0, 0, 0); room.add(gallery);
+const seats = [];
+[-9.3, 9.3].forEach((x) => {
+  for (let r = 0; r < 2; r++) {
+    for (let i = 0; i < 4; i++) {
+      seats.push(new THREE.Vector3(x + (x < 0 ? r * .9 : -r * .9), .02, -4 + i * 1.9));
+    }
+  }
+});
+
+/* ranh giới khán phòng: lan can đồng thấp ở tiền cảnh */
+const rail = new THREE.Group(); rail.position.set(0, 0, 4.6); room.add(rail);
+box(9, .06, .08, M.gold, 0, .95, 0, rail);
+[-4.4, 4.4].forEach((x) => {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(.06, .07, 1.0, 8), M.gold);
+  post.position.set(x, .5, 0); post.castShadow = true; rail.add(post);
+});
+
+/* bàn tang vật bên trái: cho tiền cảnh có chuyện để nhìn */
+const evTable = new THREE.Group(); evTable.position.set(-6.6, 0, 5.4); room.add(evTable);
+box(3.0, .12, 1.6, M.wood, 0, .78, 0, evTable);
+[[-1.2, -.5], [1.2, -.5], [-1.2, .5], [1.2, .5]].forEach(([x, z]) => {
+  box(.1, .78, .1, M.dark, x, .39, z, evTable);
+});
+box(.6, .05, .42, new THREE.MeshStandardMaterial({ color: 0xe8dfc9, roughness: .9 }), -.7, .86, .1, evTable);
+box(.55, .05, .38, new THREE.MeshStandardMaterial({ color: 0xd9cdb2, roughness: .9 }), -.15, .88, -.15, evTable);
+const evPlate = plaque('TANG VẬT', 1.6, .34, '#f0d9a8');
+evPlate.position.set(0, .5, .82); evTable.add(evPlate);
+
+/* người xem: mỗi lá phiếu là một cái đầu nhô lên ở hàng ghế */
+const crowd = new THREE.Group(); gallery.add(crowd);
+const crowdMap = new Map();
+
+function addSpectator(key, name) {
+  if (crowdMap.has(key)) return;
+  const idx = crowdMap.size;
+  if (idx >= seats.length) return;
+  const p = seats[idx];
+  const f = figure(crowd, { robe: [0x2c2c34, 0x33302a, 0x26303a, 0x342a2a][idx % 4], card: name.slice(0, 14), tint: '#cfe4ff' });
+  f.position.copy(p);
+  f.scale.setScalar(.72);
+  f.rotation.y = p.x < 0 ? Math.PI / 2 : -Math.PI / 2;
+  crowdMap.set(key, f);
+}
+
+/* --- đèn --- */
+scene.add(new THREE.HemisphereLight(0xbccbff, 0x4a3423, .62));
+scene.add(new THREE.AmbientLight(0xffe6c0, .72));
+const fill = new THREE.DirectionalLight(0xffe9d0, .55);
+fill.position.set(-4, 7, 16); scene.add(fill);
+
+const key = new THREE.DirectionalLight(0xffd9a0, 1.5);
+key.position.set(9, 15, 10);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.left = -18; key.shadow.camera.right = 18;
+key.shadow.camera.top = 18; key.shadow.camera.bottom = -18;
+scene.add(key);
+
+/* đèn trần: bốn quả cầu vàng, vừa là nguồn sáng vừa là chi tiết trang trí */
+[[-8, 4], [8, 4], [-8, -4], [8, -4]].forEach(([x, z]) => {
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.26, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xffe3ae, emissive: 0xffcf80, emissiveIntensity: 1.4 }));
+  bulb.position.set(x, 7.2, z); scene.add(bulb);
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, 1.6, 6), M.dark);
+  cord.position.set(x, 8.2, z); scene.add(cord);
+  const pl = new THREE.PointLight(0xffd39a, 14, 15, 2);
+  pl.position.set(x, 7.05, z); scene.add(pl);
+});
+
+/* hắt sáng khán phòng để hàng ghế không thành bóng đen */
+const galleryLight = new THREE.PointLight(0xffd9b0, 20, 18, 2);
+galleryLight.position.set(0, 4.2, 8); scene.add(galleryLight);
+
+const spot = new THREE.SpotLight(0xffe1a3, 70, 30, .6, .55, 1.3);
+spot.position.set(-3, 9.2, 2.5);
+spot.target.position.set(-3.6, 1, -.4);
+scene.add(spot, spot.target);
+
+const rim = new THREE.PointLight(0x9a4a4a, 26, 24, 2);
+rim.position.set(7, 4.5, -6); scene.add(rim);
+
+/* --- vòng lặp vẽ --- */
+let clock = new THREE.Clock();
+function tick() {
+  const t = clock.getElapsedTime();
+  controls.update();
+  /* đầu người xem nhấp nhô rất nhẹ, đủ để phòng không chết */
+  crowd.children.forEach((f, i) => { f.position.y = seats[i].y + Math.sin(t * 1.6 + i) * .012; });
+  judge.position.y = 1.65 + Math.sin(t * .9) * .01;
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if (!verdictShown) frameCamera();
+});
+
+/* Canh camera theo tỉ lệ màn hình: máy dọc cần lùi xa hơn để thấy đủ chiều ngang
+   phòng xử, máy ngang thì lại gần cho cảnh có sức nặng. */
+function frameCamera() {
+  const aspect = innerWidth / Math.max(1, innerHeight);
+  /* dọc thì mở góc nhìn rộng hơn, ngang thì giữ 48 cho cảnh có sức nặng */
+  camera.fov = aspect < .8 ? 58 : 48;
+  camera.updateProjectionMatrix();
+  const fov = camera.fov * Math.PI / 180;
+  const fitWidth = aspect < .8 ? 15 : 20;
+  const dist = (fitWidth / 2) / (Math.tan(fov / 2) * Math.max(.42, aspect));
+  const d = clamp(dist, 15, 30);
+  /* không để camera vượt lên trên trần (cũ: y = d/2, dọc màn hình là 17 → nhìn
+     từ trên mái xuống, chỉ thấy tường trống) */
+  camera.position.set(0, clamp(d * .34, 5.2, 7.2), d);
+  controls.target.set(0, .9, .4);
+  controls.update();
+}
+frameCamera();
+
+/* --- âm thanh: một tiếng thịch bằng WebAudio, không cần file --- */
+let actx = null;
+function thud(strength = 1) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(140, actx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(52, actx.currentTime + .18);
+    g.gain.setValueAtTime(.28 * strength, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, actx.currentTime + .3);
+    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + .32);
+  } catch (e) {}
+}
+
+/* ------------------------------------------------------------------ trạng thái */
+let CASE = readCaseFromUrl();
+let clockStart = CASE ? CASE.t : 0;
+let tally = { guilty: 0, acquit: 0, voters: [] };
+let myVote = null;
+let localVote = 0;   // phiếu bỏ ngoài Telegram: chỉ máy này thấy, cộng riêng
+let verdictShown = false;
+
+const NAMES_NEW = [...new Set([myName(), ...MEMBERS])].slice(0, 8);
+
+function paintChips() {
+  const box = $('defChips');
+  box.innerHTML = '';
+  NAMES_NEW.forEach((n) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.textContent = n;
+    b.onclick = () => { $('defendant').value = n; [...box.children].forEach(c => c.classList.remove('on')); b.classList.add('on'); };
+    box.appendChild(b);
+  });
+}
+paintChips();
+
+function showPane(which) {
+  $('paneNew').hidden = which !== 'new';
+  $('paneCase').hidden = which !== 'case';
+}
+
+/* Thu gọn bảng dưới: máy thấp thì mặc định gọn để thấy phòng xử */
+const cardEl = document.querySelector('.card');
+$('fold').onclick = () => cardEl.classList.toggle('folded');
+if (innerHeight < 720) cardEl.classList.add('folded');
+
+/* --- mở phiên --- */
+$('openCase').onclick = () => {
+  const d = $('defendant').value.trim();
+  const c = $('charge').value.trim();
+  if (d.length < 1) return toast('Chưa có bị cáo');
+  if (c.length < 4) return toast('Tội danh phải rõ ràng hơn');
+  const data = makeCase({ defendant: d, charge: c, ev1: $('ev1').value, ev2: $('ev2').value, accuser: myName() });
+  location.hash = 'v=' + encodeCase(data);
+  CASE = data; clockStart = data.t; myVote = null; verdictShown = false;
+  enterCase();
+  thud(1);
+};
+
+$('newFromCase').onclick = () => { location.hash = ''; CASE = null; showPane('new'); $('sub').textContent = 'Phòng xử án của nhóm'; };
+$('back').onclick = () => { if (history.length > 1) history.back(); else location.href = '../'; };
+
+$('share').onclick = async () => {
+  if (!CASE) return toast('Chưa mở phiên nào');
+  const link = location.origin + location.pathname + '#v=' + encodeCase(CASE);
+  const text = `Phiên toà xử ${CASE.d} — ${CASE.c}`;
+  try {
+    if (navigator.share) return await navigator.share({ title: 'Hầu Toà Online', text, url: link });
+  } catch (e) {}
+  try { await navigator.clipboard.writeText(link); toast('Đã copy link phiên toà'); }
+  catch (e) { toast('Link: ' + link, 6000); }
+};
+
+/* --- vào phiên --- */
+function enterCase() {
+  showPane('case');
+  const args = argumentsFor(CASE);
+  $('sub').textContent = `Xử ${CASE.d}`;
+  $('chargeLine').innerHTML = `<b>${esc(CASE.d)}</b> bị cáo buộc: <span class="def">${esc(CASE.c)}</span>` +
+    (CASE.e.length ? `<div class="muted" style="margin-top:5px">Chứng cứ: ${CASE.e.map(esc).join(' · ')}</div>` : '');
+  $('verdictBox').hidden = true;
+  $('seal').classList.remove('on');
+  myVote = null; localVote = 0;
+  $('voteGuilty').disabled = false; $('voteAcquit').disabled = false;
+  $('voteRow').hidden = false;
+  pollTally(true);
+  speakLine(args.pros[0]);
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* dòng thoại hiện dần ở đáy, không cần bảng riêng */
+let lastLine = '';
+function speakLine(line) {
+  if (!line || line === lastLine) return;
+  lastLine = line;
+  toast(line, 5200);
+}
+
+/* --- đồng bộ tiến trình --- */
+function elapsed() { return CASE ? (Date.now() - clockStart) / 1000 : 0; }
+
+function phaseNow() {
+  const t = elapsed();
+  if (t < TL.prose) return { key: 'open', name: 'Khai mạc', left: TL.prose - t };
+  if (t < TL.prose2) return { key: 'pros', name: 'Công tố', left: TL.prose2 - t };
+  if (t < TL.vote) return { key: 'def', name: 'Bào chữa', left: TL.vote - t };
+  if (t < TL.verdict) return { key: 'vote', name: 'Bồi thẩm đoàn bỏ phiếu', left: TL.verdict - t };
+  return { key: 'done', name: 'Tuyên án', left: 0 };
+}
+
+function fmt(s) {
+  s = Math.max(0, Math.round(s));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+function tickUi() {
+  if (!CASE) { requestAnimationFrame(tickUi); return; }
+  const ph = phaseNow();
+  $('phaseName').textContent = ph.name;
+  $('phaseTimer').textContent = ph.key === 'done' ? '—' : fmt(ph.left);
+
+  const args = argumentsFor(CASE);
+  if (ph.key === 'open') speakLine(`Phiên toà xét xử ${CASE.d}, tội danh: ${CASE.c}.`);
+  if (ph.key === 'pros') {
+    const i = clamp(Math.floor((elapsed() - TL.prose) / 5), 0, args.pros.length - 1);
+    speakLine(args.pros[i]);
+  }
+  if (ph.key === 'def') {
+    const i = clamp(Math.floor((elapsed() - TL.prose2) / 5), 0, args.def.length - 1);
+    speakLine(args.def[i]);
+  }
+
+  if (ph.key === 'vote') {
+    $('voteRow').hidden = false;
+  }
+  if (ph.key === 'done' && !verdictShown) showVerdict();
+  requestAnimationFrame(tickUi);
+}
+
+/* --- bỏ phiếu --- */
+$('voteGuilty').onclick = () => castVote(2);
+$('voteAcquit').onclick = () => castVote(1);
+
+async function castVote(code) {
+  if (!CASE) return;
+  if (myVote) return toast('Một phiếu thôi, hội đồng nhớ dai lắm');
+  if (phaseNow().key !== 'vote') return toast('Chưa tới giờ bỏ phiếu');
+  myVote = code;
+  $('voteGuilty').disabled = true; $('voteAcquit').disabled = true;
+  addSpectator('me', myName());
+  thud(.8);
+
+  const initData = myInitData();
+  if (!initData) {
+    /* Ngoài Telegram: vẫn cho bỏ phiếu nhưng chỉ máy này thấy */
+    localVote = code;
+    toast('Đã ghi phiếu (chỉ máy này thấy, mở trong Telegram mới tính chung)');
+    return paintTally();
+  }
+  try {
+    const r = await fetch(`${WORKER}/lb/${appIdOf(CASE)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData, score: code })
+    });
+    if (!r.ok) throw new Error('vote ' + r.status);
+    toast(code === 2 ? 'Phiếu: có tội' : 'Phiếu: trắng án');
+    pollTally();
+  } catch (e) {
+    localVote = code;
+    paintTally();
+    toast('Không gửi được phiếu, đã ghi tạm trên máy');
+  }
+}
+
+async function pollTally(now = false) {
+  if (!CASE) return;
+  try {
+    const r = await fetch(`${WORKER}/lb/${appIdOf(CASE)}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('lb ' + r.status);
+    const d = await r.json();
+    const rows = d.scores || [];
+    let g = 0, a = 0;
+    rows.forEach((row) => {
+      if (row.score >= 2) g++;
+      else if (row.score === 1) a++;
+      addSpectator(row.pid || row.name, row.name || 'Khách');
+    });
+    tally = { guilty: g, acquit: a };
+    paintTally();
+  } catch (e) {
+    if (now) paintTally();
+  }
+}
+setInterval(() => { if (CASE && phaseNow().key !== 'done') pollTally(); }, 2500);
+
+function counts() {
+  const g = tally.guilty + (localVote === 2 ? 1 : 0);
+  const a = tally.acquit + (localVote === 1 ? 1 : 0);
+  return { g, a, tot: g + a };
+}
+
+function paintTally() {
+  const { g, a, tot } = counts();
+  const base = Math.max(1, tot);
+  $('tG').textContent = `Có tội · ${g}`;
+  $('tA').textContent = `Trắng án · ${a}`;
+  $('barG').style.width = (g / base * 100) + '%';
+  $('barA').style.width = (a / base * 100) + '%';
+}
+
+/* --- tuyên án --- */
+function showVerdict() {
+  verdictShown = true;
+  const { g, a, tot } = counts();
+  const ratio = tot ? g / tot : 0;
+  const guilty = ratio >= 0.5;
+  const punish = verdictPunishment(CASE, ratio);
+
+  $('sealV').textContent = guilty ? 'CÓ TỘI' : 'TRẮNG ÁN';
+  $('sealS').textContent = tot
+    ? `${g}/${tot} phiếu buộc tội · ${guilty ? punish : 'tha bổng, về chỗ ngồi'}`
+    : 'Không ai bỏ phiếu, toà tuyên theo cảm tính';
+  $('seal').classList.add('on');
+  setTimeout(() => $('seal').classList.remove('on'), 6000);
+
+  /* búa gõ ba lần */
+  let n = 0;
+  const hit = setInterval(() => {
+    thud(1.2); gavel.rotation.z = -.5;
+    setTimeout(() => { gavel.rotation.z = 0; }, 120);
+    if (++n >= 3) clearInterval(hit);
+  }, 420);
+
+  $('voteRow').hidden = true;
+  $('verdictBox').hidden = false;
+  $('verdictBox').innerHTML = tot
+    ? `<b>${guilty ? 'Có tội' : 'Trắng án'}</b> · ${g}/${tot} phiếu buộc tội.<br>` +
+      (guilty ? `Hình phạt: ${esc(punish)}.` : 'Bị cáo ra về, nhưng hội đồng nhớ mặt.')
+    : 'Không có phiếu nào. Coi như toà xử lưu.',
+  /* camera lùi lại nhìn toàn cảnh lúc tuyên án */
+  controls.autoRotate = false;
+  camera.position.set(0, 9, 16);
+  controls.target.set(0, 2.2, -1.5);
+
+  /* đưa người bỏ phiếu vào khán phòng */
+  tally.voters?.forEach((v, i) => addSpectator('v' + i, v));
+}
+
+/* ------------------------------------------------------------------ khởi động */
+if (CASE) {
+  if (Math.abs(Date.now() - CASE.t) > 6 * 3600 * 1000) {
+    /* phiên cũ quá nửa ngày thì mở lại từ đầu cho khỏi vào giữa lúc tuyên án */
+    CASE.t = Date.now();
+    location.hash = 'v=' + encodeCase(CASE);
+  }
+  clockStart = CASE.t;
+  enterCase();
+  addSpectator('me', myName());
+} else {
+  showPane('new');
+  controls.autoRotateSpeed = 0.5;
+}
+tickUi();
+</script>
+</body>
+</html>
