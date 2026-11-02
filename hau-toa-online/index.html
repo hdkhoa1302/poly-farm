@@ -96,6 +96,17 @@
     font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center}
   .toast.on{opacity:1}
 
+  /* Toà dựng cho màn hình dọc. Máy xoay ngang thì chặn lại, khỏi nửa màn hình trống */
+  .rotate{position:fixed;inset:0;z-index:30;display:none;place-items:center;padding:26px;
+    background:radial-gradient(120% 120% at 50% 30%,#1a130d,#0b0806);text-align:center}
+  .rotate .rc{max-width:300px}
+  .rotate svg{width:56px;height:56px;color:var(--gold);margin-bottom:16px;
+    animation:rot 2.2s var(--ease) infinite}
+  .rotate b{display:block;font:600 17px 'Bricolage Grotesque',Inter,sans-serif;letter-spacing:.02em}
+  .rotate span{display:block;margin-top:8px;font-size:13px;line-height:1.5;color:var(--muted)}
+  @keyframes rot{0%,60%{transform:rotate(0)}80%,100%{transform:rotate(-90deg)}}
+  @media (orientation:landscape) and (pointer:coarse){.rotate{display:grid}}
+
   /* tuyên án: tấm niêm phong bung ra giữa màn hình */
   .seal{position:fixed;inset:0;display:grid;place-items:center;z-index:15;pointer-events:none}
   .sealCard{transform:scale(.86);opacity:0;transition:transform .5s var(--ease),opacity .4s;
@@ -176,6 +187,16 @@
 </div></div>
 
 <div class="toast" id="toast"></div>
+
+<div class="rotate" id="rotate">
+  <div class="rc">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>
+    </svg>
+    <b>Xoay dọc máy</b>
+    <span>Phòng xử dựng cho màn hình dọc. Xoay lại rồi bấm mở phiên, khung hình mới đủ chỗ cho chánh án, bị cáo với bồi thẩm đoàn.</span>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -334,17 +355,91 @@ controls.autoRotate = false;
 controls.enablePan = false;
 controls.update();
 
+/* --- vân gỗ / thảm: vẽ bằng canvas, đủ để khối không còn phẳng lì --- */
+function makeTex(size, draw, rx = 1, ry = 1) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  draw(cv.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(rx, ry);
+  t.anisotropy = 4;
+  return t;
+}
+
+const woodTex = makeTex(256, (c, s) => {
+  c.fillStyle = '#6b482a'; c.fillRect(0, 0, s, s);
+  for (let i = 0; i < 70; i++) {
+    c.globalAlpha = .05 + Math.random() * .13;
+    c.strokeStyle = Math.random() > .5 ? '#402a15' : '#8a6136';
+    c.lineWidth = .6 + Math.random() * 2.2;
+    const y = Math.random() * s, k = (Math.random() - .5) * 16;
+    c.beginPath(); c.moveTo(0, y);
+    c.bezierCurveTo(s * .3, y + k, s * .7, y - k, s, y + k * .4);
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+}, 2, 2);
+
+const floorTex = makeTex(512, (c, s) => {
+  const plank = s / 8;
+  for (let i = 0; i < 8; i++) {
+    c.fillStyle = i % 2 ? '#4e3620' : '#573c24';
+    c.fillRect(0, i * plank, s, plank);
+    c.strokeStyle = 'rgba(20,12,6,.45)'; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(0, i * plank); c.lineTo(s, i * plank); c.stroke();
+    for (let g = 0; g < 12; g++) {
+      c.globalAlpha = .06 + Math.random() * .08;
+      c.strokeStyle = '#2a1a0d'; c.lineWidth = 1 + Math.random() * 2;
+      const y = i * plank + Math.random() * plank;
+      c.beginPath(); c.moveTo(0, y); c.lineTo(s, y + (Math.random() - .5) * 6); c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
+}, 4, 4);
+
+const carpetTex = makeTex(512, (c, s) => {
+  c.fillStyle = '#5b1d1d'; c.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2400; i++) {
+    c.globalAlpha = .05 + Math.random() * .07;
+    c.fillStyle = Math.random() > .5 ? '#7a2828' : '#3c1010';
+    c.fillRect(Math.random() * s, Math.random() * s, 3, 3);
+  }
+  c.globalAlpha = 1;
+  c.strokeStyle = '#9c7c3a'; c.lineWidth = 14; c.strokeRect(26, 26, s - 52, s - 52);
+  c.strokeStyle = 'rgba(200,170,90,.55)'; c.lineWidth = 4; c.strokeRect(48, 48, s - 96, s - 96);
+  c.strokeStyle = 'rgba(200,170,90,.35)'; c.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    c.beginPath();
+    c.arc(s / 2, s / 2, 120, a, a + .28); c.stroke();
+  }
+});
+
+const clothTex = makeTex(256, (c, s) => {
+  c.fillStyle = '#2f2a22'; c.fillRect(0, 0, s, s);
+  for (let i = 0; i < 3000; i++) {
+    c.globalAlpha = .05;
+    c.fillStyle = Math.random() > .5 ? '#000' : '#5a5040';
+    c.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+  }
+  c.globalAlpha = 1;
+});
+
 /* --- vật liệu dùng chung --- */
 const M = {
-  floor: new THREE.MeshStandardMaterial({ color: 0x5a4029, roughness: .9 }),
-  wood: new THREE.MeshStandardMaterial({ color: 0x7d5530, roughness: .7 }),
-  dark: new THREE.MeshStandardMaterial({ color: 0x3a2b1d, roughness: .85 }),
-  wall: new THREE.MeshStandardMaterial({ color: 0x3a2c20, roughness: .95 }),
-  gold: new THREE.MeshStandardMaterial({ color: 0xd8b44a, roughness: .35, metalness: .6 }),
+  floor: new THREE.MeshStandardMaterial({ map: floorTex, color: 0xffffff, roughness: .82 }),
+  wood: new THREE.MeshStandardMaterial({ map: woodTex, color: 0xffffff, roughness: .68 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x30241a, roughness: .8 }),
+  wall: new THREE.MeshStandardMaterial({ color: 0x3c2d21, roughness: .95 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xd8b44a, roughness: .32, metalness: .7 }),
   wine: new THREE.MeshStandardMaterial({ color: 0x7d2626, roughness: .7 }),
-  cloth: new THREE.MeshStandardMaterial({ color: 0x3a2e22, roughness: .95 }),
-  skin: new THREE.MeshStandardMaterial({ color: 0xe0bd97, roughness: .78 }),
-  bar: new THREE.MeshStandardMaterial({ color: 0xa2916f, roughness: .35, metalness: .7 })
+  cloth: new THREE.MeshStandardMaterial({ map: clothTex, color: 0xffffff, roughness: .95 }),
+  carpet: new THREE.MeshStandardMaterial({ map: carpetTex, color: 0xffffff, roughness: .98 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0xe0bd97, roughness: .75 }),
+  hair: new THREE.MeshStandardMaterial({ color: 0x1c1512, roughness: .95 }),
+  bar: new THREE.MeshStandardMaterial({ color: 0xb09a72, roughness: .3, metalness: .75 }),
+  paper: new THREE.MeshStandardMaterial({ color: 0xe8dfc9, roughness: .95 })
 };
 
 const box = (w, h, d, mat, x, y, z, parent = scene) => {
@@ -360,11 +455,10 @@ const W = 22, D = 20, H = 9;
 const floor = new THREE.Mesh(new THREE.BoxGeometry(W, .4, D), M.floor);
 floor.position.y = -.2; floor.receiveShadow = true; room.add(floor);
 
-/* sàn gỗ: một mặt phẳng, chỉ thêm tấm thảm trước bục cho có lớp */
-const carpet = new THREE.Mesh(new THREE.PlaneGeometry(9, 6),
-  new THREE.MeshStandardMaterial({ color: 0x5b1f1f, roughness: .96 }));
+/* thảm lớn trải từ bục xuống, có viền và hoa văn */
+const carpet = new THREE.Mesh(new THREE.PlaneGeometry(10, 13), M.carpet);
 carpet.rotation.x = -Math.PI / 2;
-carpet.position.set(0, .03, -1.2);
+carpet.position.set(0, .025, -1.0);
 carpet.receiveShadow = true;
 room.add(carpet);
 
@@ -379,6 +473,21 @@ box(W - .6, .1, .26, M.gold, 0, 1.64, -D / 2 + .34, room);
 
 /* trần: dầm ngang */
 for (let i = 0; i < 5; i++) box(W, .32, .4, M.wood, 0, H - .2, -D / 2 + 2 + i * 4, room);
+
+/* cột ốp và đèn tường hai bên vách, cho mặt tường có nhịp */
+[-8.6, -4.3, 4.3, 8.6].forEach((x) => {
+  box(.5, 6.2, .18, M.dark, x, 3.4, -D / 2 + .3, room);
+  box(.36, .12, .22, M.gold, x, 6.55, -D / 2 + .3, room);
+  box(.3, .42, .06, M.dark, x, 5.1, -D / 2 + .34, room);
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(.18, .26, 10, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x2c2118, roughness: .8, side: THREE.DoubleSide }));
+  shade.position.set(x, 5.18, -D / 2 + .46); shade.rotation.x = Math.PI; room.add(shade);
+  const sconce = new THREE.Mesh(new THREE.SphereGeometry(.11, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffdfae, emissive: 0xffc06a, emissiveIntensity: 1.8 }));
+  sconce.position.set(x, 5.06, -D / 2 + .46); room.add(sconce);
+  const glow = new THREE.PointLight(0xffc98a, 6, 6, 2);
+  glow.position.set(x, 5.06, -D / 2 + .6); room.add(glow);
+});
 
 /* quốc huy giả: vòng tròn vàng trên vách */
 const emblem = new THREE.Group(); emblem.position.set(0, 5.4, -D / 2 + .32); room.add(emblem);
@@ -397,30 +506,68 @@ box(9, 1.5, 2.2, M.wood, 0, .75, 0, bench);
 box(9.4, .18, 2.6, M.dark, 0, 1.56, 0, bench);
 box(9.4, .1, .14, M.gold, 0, 1.66, 1.28, bench);
 box(2.6, 1.1, .14, M.wine, 0, 2.2, -1.05, bench);
+/* mặt trước bục: ba ô chạm nổi + phào chỉ vàng */
+[-2.7, 0, 2.7].forEach((x) => {
+  box(2.3, .82, .06, M.dark, x, .78, 1.13, bench);
+  box(2.06, .6, .05, M.wood, x, .78, 1.17, bench);
+});
+box(9.2, .09, .09, M.gold, 0, 1.4, 1.14, bench);
+/* tựa lưng ghế chánh án */
+box(2.5, 2.8, .16, M.dark, 0, 3.05, -1.28, bench);
+box(2.1, 2.4, .1, M.wine, 0, 3.05, -1.18, bench);
+box(1.5, .1, .12, M.gold, 0, 4.2, -1.14, bench);
 
 /* ghế chánh án */
 function figure(parent, opts = {}) {
   const g = new THREE.Group();
-  const robeMat = new THREE.MeshStandardMaterial({ color: opts.robe || 0x33333d, roughness: .9 });
-  const robe = new THREE.Mesh(new THREE.CylinderGeometry(.42, .62, 1.5, 8), robeMat);
-  robe.position.y = .75; robe.castShadow = true; g.add(robe);
-  /* tay: hai ống nhỏ, đủ để hình người không thành tấm ván */
+  const robeMat = new THREE.MeshStandardMaterial({ color: opts.robe || 0x33333d, roughness: .88 });
+
+  /* thân dưới xoè, thân trên thon, vai ngang: đủ để đọc ra người */
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.36, .66, 1.3, 10), robeMat);
+  skirt.position.y = .65; skirt.castShadow = true; g.add(skirt);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(.32, .38, .64, 10), robeMat);
+  torso.position.y = 1.52; torso.castShadow = true; g.add(torso);
+  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(.84, .16, .4), robeMat);
+  shoulders.position.y = 1.78; shoulders.castShadow = true; g.add(shoulders);
+
+  /* tay áo và bàn tay */
   [-1, 1].forEach((s) => {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(.09, .08, .95, 6), robeMat);
-    arm.position.set(s * .45, 1.15, 0); arm.rotation.z = s * .16;
-    arm.castShadow = true; g.add(arm);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(.1, .085, .82, 8), robeMat);
+    arm.position.set(s * .43, 1.44, .02);
+    arm.rotation.z = s * .13; arm.castShadow = true; g.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(.082, 8, 6), M.skin);
+    hand.position.set(s * .47, 1.02, .03); g.add(hand);
   });
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(.27, 1), M.skin);
-  head.position.y = 1.78; head.castShadow = true; g.add(head);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, .1, 8), M.dark);
-  cap.position.y = 2.02; g.add(cap);
+
+  /* cổ, đầu, tóc */
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(.088, .1, .14, 8), M.skin);
+  neck.position.y = 1.9; g.add(neck);
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(.26, 2), M.skin);
+  head.position.y = 2.13; head.castShadow = true; g.add(head);
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(.268, 12, 8, 0, Math.PI * 2, 0, Math.PI * .58), M.hair);
+  hair.position.y = 2.16; g.add(hair);
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x120d0a, roughness: .6 });
+  [-1, 1].forEach((s) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(.032, 6, 5), eyeMat);
+    eye.position.set(s * .085, 2.14, .235); g.add(eye);
+  });
+
+  if (opts.collar !== false) {
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(.16, .21, .1, 10), M.paper);
+    collar.position.y = 1.93; g.add(collar);
+  }
+  if (opts.tie) {
+    const tie = new THREE.Mesh(new THREE.BoxGeometry(.09, .38, .03), M.dark);
+    tie.position.set(0, 1.66, .27); g.add(tie);
+  }
   if (opts.band) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(.29, .29, .09, 8), M.gold);
-    band.position.y = 1.95; g.add(band);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(.272, .272, .07, 12), M.gold);
+    band.position.y = 2.02; g.add(band);
   }
   if (opts.card) {
     const c = labelSprite(opts.card, opts.tint || '#f7efe2');
-    c.position.y = 2.55; c.scale.set(1.7, .42, 1); g.add(c);
+    c.position.y = 2.72; c.scale.set(1.7, .42, 1); g.add(c);
   }
   parent.add(g);
   return g;
@@ -466,7 +613,7 @@ function plaque(text, w = 1.9, h = .42, tint = '#f7efe2') {
 
 const judge = figure(bench, { robe: 0x141419, band: true });
 judge.position.set(0, 1.65, -.2);
-judge.scale.setScalar(.92);
+judge.scale.setScalar(.78);
 const judgePlate = plaque('CHÁNH ÁN', 2.6, .52, '#ffe1a3');
 judgePlate.position.set(0, .92, 1.16); bench.add(judgePlate);
 
@@ -476,7 +623,7 @@ const gh = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .9, 8), M.wood);
 gh.rotation.z = Math.PI / 2.6; gavel.add(gh);
 const gb = new THREE.Mesh(new THREE.BoxGeometry(.42, .26, .26), M.dark);
 gb.position.set(.36, .22, 0); gb.rotation.z = Math.PI / 2.6; gavel.add(gb);
-gavel.position.set(1.9, 1.95, .2); bench.add(gavel);
+gavel.position.set(1.9, 1.66, .25); bench.add(gavel);
 
 /* vành đai bị cáo: lan can thấp để còn thấy người đứng bên trong */
 const dock = new THREE.Group(); dock.position.set(-3.6, 0, -.4); room.add(dock);
@@ -493,7 +640,7 @@ for (let i = 0; i < 7; i++) {
 }
 const accused = figure(dock, { robe: 0x2b2b33 });
 accused.position.set(0, .2, 0);
-accused.scale.setScalar(.95);
+accused.scale.setScalar(.8);
 const dockPlate = plaque('BỊ CÁO', 2.4, .5, '#ffd9a0');
 dockPlate.position.set(0, 1.3, 1.56); dock.add(dockPlate);
 
@@ -503,29 +650,29 @@ function podium(x, z, color, label) {
   box(2.4, 1.3, 1.5, M.wood, 0, .65, 0, g);
   box(2.6, .12, 1.7, color, 0, 1.32, 0, g);
   const f = figure(g, { robe: color === M.wine ? 0x6d2020 : 0x2b3a58 });
-  f.position.set(0, .12, -.95); f.scale.setScalar(.95);
+  f.position.set(0, .12, -.95); f.scale.setScalar(.8);
   const pl = plaque(label, 1.9, .42);
-  pl.position.set(0, .82, .77); g.add(pl);
+  pl.position.set(0, .92, .79); g.add(pl);
   return g;
 }
-const prosPodium = podium(-5.8, 3.0, M.wine, 'CÔNG TỐ');
-const defPodium = podium(5.8, 3.0, new THREE.MeshStandardMaterial({ color: 0x24304a, roughness: .8 }), 'BÀO CHỮA');
+const prosPodium = podium(-4.6, 3.0, M.wine, 'CÔNG TỐ');
+const defPodium = podium(4.6, 3.0, new THREE.MeshStandardMaterial({ color: 0x24304a, roughness: .8 }), 'BÀO CHỮA');
 
 /* bồi thẩm đoàn: dãy ghế bên phải */
-const jury = new THREE.Group(); jury.position.set(8.0, 0, -1.5); room.add(jury);
+const jury = new THREE.Group(); jury.position.set(7.1, 0, -1.5); room.add(jury);
 for (let r = 0; r < 3; r++) {
   box(2.2, .9, 3.4, M.wood, 0, .45, -2.2 + r * 2.2, jury);
 }
 for (let r = 0; r < 3; r++) for (let i = 0; i < 2; i++) {
   const f = figure(jury, { robe: 0x2f2a22 });
   f.position.set(-.4 + i * .9, .95, -2.6 + r * 2.2);
-  f.scale.setScalar(.62);
+  f.scale.setScalar(.55);
 }
 
 /* khán phòng: hai dãy người đứng dọc hai bên tường, không chắn tầm nhìn vào bục */
 const gallery = new THREE.Group(); gallery.position.set(0, 0, 0); room.add(gallery);
 const seats = [];
-[-9.3, 9.3].forEach((x) => {
+[-7.0, 7.0].forEach((x) => {
   for (let r = 0; r < 2; r++) {
     for (let i = 0; i < 4; i++) {
       seats.push(new THREE.Vector3(x + (x < 0 ? r * .9 : -r * .9), .02, -4 + i * 1.9));
@@ -563,7 +710,7 @@ function addSpectator(key, name) {
   const p = seats[idx];
   const f = figure(crowd, { robe: [0x2c2c34, 0x33302a, 0x26303a, 0x342a2a][idx % 4], card: name.slice(0, 14), tint: '#cfe4ff' });
   f.position.copy(p);
-  f.scale.setScalar(.72);
+  f.scale.setScalar(.6);
   f.rotation.y = p.x < 0 ? Math.PI / 2 : -Math.PI / 2;
   crowdMap.set(key, f);
 }
@@ -584,9 +731,12 @@ scene.add(key);
 
 /* đèn trần: bốn quả cầu vàng, vừa là nguồn sáng vừa là chi tiết trang trí */
 [[-8, 4], [8, 4], [-8, -4], [8, -4]].forEach(([x, z]) => {
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.26, 12, 10),
-    new THREE.MeshStandardMaterial({ color: 0xffe3ae, emissive: 0xffcf80, emissiveIntensity: 1.4 }));
-  bulb.position.set(x, 7.2, z); scene.add(bulb);
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(.46, .42, 14, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x2c2118, roughness: .8, side: THREE.DoubleSide }));
+  shade.position.set(x, 7.32, z); scene.add(shade);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.2, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xffe3ae, emissive: 0xffcf80, emissiveIntensity: 1.6 }));
+  bulb.position.set(x, 7.06, z); scene.add(bulb);
   const cord = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, 1.6, 6), M.dark);
   cord.position.set(x, 8.2, z); scene.add(cord);
   const pl = new THREE.PointLight(0xffd39a, 14, 15, 2);
@@ -633,7 +783,7 @@ function frameCamera() {
   camera.fov = aspect < .8 ? 58 : 48;
   camera.updateProjectionMatrix();
   const fov = camera.fov * Math.PI / 180;
-  const fitWidth = aspect < .8 ? 15 : 20;
+  const fitWidth = aspect < .8 ? 19.5 : 20;
   const dist = (fitWidth / 2) / (Math.tan(fov / 2) * Math.max(.42, aspect));
   const d = clamp(dist, 15, 30);
   /* không để camera vượt lên trên trần (cũ: y = d/2, dọc màn hình là 17 → nhìn
